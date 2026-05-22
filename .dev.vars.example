@@ -1,0 +1,24 @@
+# Load .env.development* files when running `wrangler dev`
+NEXTJS_ENV=development
+
+# Better Auth — generate with: openssl rand -base64 32
+BETTER_AUTH_SECRET=
+
+# Google OAuth — from https://console.cloud.google.com/apis/credentials
+# Authorized redirect URIs to register:
+#   http://localhost:3000/api/auth/callback/google
+#   https://<your-prod-domain>/api/auth/callback/google
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Dodo Payments — https://app.dodopayments.com
+# DODO_MODE: "test" for sandbox, "live" for production
+DODO_MODE=test
+DODO_API_KEY=
+DODO_WEBHOOK_SECRET=
+
+# Product IDs from your Dodo dashboard — one per credit pack.
+# Configure each product's price/credits to match src/lib/billing/packs.ts
+DODO_PRODUCT_STARTER=
+DODO_PRODUCT_CREATOR=
+DODO_PRODUCT_PRO=

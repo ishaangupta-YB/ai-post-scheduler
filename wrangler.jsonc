@@ -35,23 +35,44 @@
 	"observability": {
 		"enabled": true
 	},
-	"upload_source_maps": true
-	/**
-	 * Smart Placement
-	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
-	 */
-	// "placement": {  "mode": "smart" }
-	/**
-	 * Bindings
-	 * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
-	 * databases, object storage, AI inference, real-time communication and more.
-	 * https://developers.cloudflare.com/workers/runtime-apis/bindings/
-	 */
-	/**
-	 * Environment Variables
-	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
-	 * Note: Use secrets to store sensitive data.
-	 * https://developers.cloudflare.com/workers/configuration/secrets/
-	 */
-	// "vars": {  "MY_VARIABLE": "production_value" }
+	"upload_source_maps": true,
+	"vars": {
+		"BETTER_AUTH_URL": "http://localhost:3000"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "aipostsc-auth-db",
+			"database_id": "c8acc90e-7082-4582-ad5e-bbe89d8350c6",
+			"migrations_dir": "drizzle"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "AIPOSTSC_AUTH_KV",
+			"id": "c77caa35f68641eface663e457c02d2b"
+		}
+	],
+	"env": {
+		"production": {
+			"name": "broad-sky-115b",
+			"vars": {
+				"BETTER_AUTH_URL": "http://localhost:3000"
+			},
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "aipostsc-auth-db",
+					"database_id": "c8acc90e-7082-4582-ad5e-bbe89d8350c6",
+					"migrations_dir": "drizzle"
+				}
+			],
+			"kv_namespaces": [
+				{
+					"binding": "AIPOSTSC_AUTH_KV",
+					"id": "c77caa35f68641eface663e457c02d2b"
+				}
+			]
+		}
+	}
 }

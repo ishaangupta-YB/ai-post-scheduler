@@ -1,0 +1,15 @@
+import { DashboardPageHeader } from "../../_common/dashboard-page-header"
+import { mainNav } from "../../_common/dashboard-nav"
+
+const page = mainNav.find((item) => item.name === "Settings")!
+
+export default function SettingsPage() {
+  return (
+    <div>
+      <DashboardPageHeader title={page.name} description={page.description} />
+      <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+        Workspace and account settings will appear here.
+      </div>
+    </div>
+  )
+}

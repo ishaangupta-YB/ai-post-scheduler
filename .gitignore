@@ -9,9 +9,14 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+package-lock.json
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
 # next.js
 /.next/
@@ -19,10 +24,15 @@
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
+Thumbs.db
 *.pem
+*.swp
+*.swo
+*~
 
 # debug
 npm-debug.log*
@@ -30,9 +40,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env & secrets (commit only *.example templates)
 .env*
 !.env.example
+.dev.vars*
+!.dev.vars.example
 
 # vercel
 .vercel
@@ -41,12 +53,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# OpenNext
+# OpenNext / Cloudflare
 /.open-next
-
-# wrangler files
 .wrangler
-.dev.vars*
+.mf/
 
+# tooling
+.turbo
+.cursor/
 
-!.dev.vars.example
+# local agent skills (reinstall via skills-lock.json or docs)
+# .agents/
