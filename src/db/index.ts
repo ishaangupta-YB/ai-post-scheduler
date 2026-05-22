@@ -3,8 +3,15 @@ import { getCloudflareContext } from "@opennextjs/cloudflare"
 
 import * as authSchema from "./auth-schema"
 import * as billingSchema from "./billing-schema"
+import * as integrationsSchema from "./integrations-schema"
+import * as contentSchema from "./content-schema"
 
-export const schema = { ...authSchema, ...billingSchema }
+export const schema = {
+  ...authSchema,
+  ...billingSchema,
+  ...integrationsSchema,
+  ...contentSchema,
+}
 
 export type Schema = typeof schema
 export type DB = ReturnType<typeof drizzle<Schema>>
@@ -20,3 +27,5 @@ export function getDb(): DB {
 
 export * from "./auth-schema"
 export * from "./billing-schema"
+export * from "./integrations-schema"
+export * from "./content-schema"

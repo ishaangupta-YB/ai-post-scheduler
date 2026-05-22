@@ -12,7 +12,11 @@ import {
 } from "@/lib/billing/packs"
 
 type CheckoutBody =
-  | { purchaseType: "subscription"; planId: string }
+  | {
+      purchaseType: "subscription"
+      planId: string
+      billingCycle?: "monthly" | "annual"
+    }
   | { purchaseType: "topup"; packId: string }
 
 export async function POST(request: Request) {
@@ -48,10 +52,12 @@ export async function POST(request: Request) {
     if (!plan) {
       return NextResponse.json({ error: "unknown plan" }, { status: 404 })
     }
-    const productId = getDodoPlanProductId(env, plan.id)
+    const billingCycle: "monthly" | "annual" =
+      body.billingCycle === "annual" ? "annual" : "monthly"
+    const productId = getDodoPlanProductId(env, plan.id, billingCycle)
     if (!productId) {
       return NextResponse.json(
-        { error: `plan ${plan.id} not configured` },
+        { error: `plan ${plan.id} (${billingCycle}) not configured` },
         { status: 500 },
       )
     }
@@ -63,6 +69,7 @@ export async function POST(request: Request) {
       metadata: {
         user_id: session.user.id,
         plan_id: plan.id,
+        billing_cycle: billingCycle,
         purchase_type: "subscription",
       },
     })

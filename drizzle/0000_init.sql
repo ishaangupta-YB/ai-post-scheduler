@@ -48,6 +48,7 @@ CREATE TABLE `users` (
 	`topup_credit_balance` integer DEFAULT 0 NOT NULL,
 	`plan_id` text,
 	`plan_status` text,
+	`plan_billing_cycle` text,
 	`plan_period_end` integer,
 	`dodo_subscription_id` text,
 	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
@@ -95,3 +96,77 @@ CREATE TABLE `payment_events` (
 	`payload` text NOT NULL,
 	`processed_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
 );
+--> statement-breakpoint
+CREATE TABLE `idea_groups` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`name` text NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `idea_groups_user_id_idx` ON `idea_groups` (`user_id`);--> statement-breakpoint
+CREATE TABLE `ideas` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`group_id` text,
+	`title` text,
+	`description` text,
+	`images` text,
+	`tags` text,
+	`sort_order` integer DEFAULT 0 NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`group_id`) REFERENCES `idea_groups`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE INDEX `ideas_user_id_idx` ON `ideas` (`user_id`);--> statement-breakpoint
+CREATE INDEX `ideas_user_id_group_id_idx` ON `ideas` (`user_id`,`group_id`);--> statement-breakpoint
+CREATE TABLE `scheduled_posts` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`integration_id` text NOT NULL,
+	`idea_id` text,
+	`content` text NOT NULL,
+	`images` text,
+	`scheduled_at` integer NOT NULL,
+	`timezone` text NOT NULL,
+	`status` text DEFAULT 'queued' NOT NULL,
+	`published_at` integer,
+	`published_url` text,
+	`failure_reason` text,
+	`attempt_count` integer DEFAULT 0 NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`integration_id`) REFERENCES `integrations`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`idea_id`) REFERENCES `ideas`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE INDEX `scheduled_posts_user_id_scheduled_at_idx` ON `scheduled_posts` (`user_id`,`scheduled_at`);--> statement-breakpoint
+CREATE INDEX `scheduled_posts_status_scheduled_at_idx` ON `scheduled_posts` (`status`,`scheduled_at`);--> statement-breakpoint
+CREATE INDEX `scheduled_posts_integration_id_idx` ON `scheduled_posts` (`integration_id`);--> statement-breakpoint
+CREATE TABLE `integrations` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`platform` text NOT NULL,
+	`handle` text,
+	`profile_image` text,
+	`profile_url` text,
+	`access_token` text,
+	`refresh_token` text,
+	`token_expires_at` integer,
+	`scope` text,
+	`metadata` text,
+	`status` text DEFAULT 'active' NOT NULL,
+	`connected_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`last_sync_at` integer,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `integrations_user_id_idx` ON `integrations` (`user_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `integrations_user_id_platform_unique` ON `integrations` (`user_id`,`platform`);

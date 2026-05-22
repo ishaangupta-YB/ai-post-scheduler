@@ -1,50 +1,32 @@
-"use client"
+import { headers } from "next/headers"
+import { redirect } from "next/navigation"
+import { eq } from "drizzle-orm"
 
-import { useState, useEffect } from "react"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { CHANNELS } from "@/lib/constants/social-platforms"
+import { getDb, integrations } from "@/db"
+import { getAuth } from "@/lib/auth"
+import { INTEGRATIONS } from "@/lib/constants/integrations"
+
 import { DashboardPageHeader } from "../../_common/dashboard-page-header"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import {
+  ConnectButton,
+  DisconnectButton,
+} from "./_components/integration-row-actions"
 
-export default function IntegrationsPage() {
-  const [mounted, setMounted] = useState(false)
-  const [connectedKeys, setConnectedKeys] = useState<string[]>([])
+export const dynamic = "force-dynamic"
 
-  useEffect(() => {
-    setMounted(true)
-    const stored = localStorage.getItem("lemon_connected_integrations")
-    if (stored) {
-      try {
-        setConnectedKeys(JSON.parse(stored))
-      } catch (e) {
-        console.error(e)
-      }
-    }
-  }, [])
+export default async function IntegrationsPage() {
+  const session = await getAuth().api.getSession({ headers: await headers() })
+  if (!session) redirect("/sign-in")
 
-  const toggleIntegration = async (type: string) => {
-    // Also hit our empty API route just to satisfy the user's request
-    try {
-      await fetch('/api/integrations', { method: 'POST', body: JSON.stringify({ type }) })
-    } catch(e) {}
+  const db = getDb()
+  const userRows = await db
+    .select()
+    .from(integrations)
+    .where(eq(integrations.userId, session.user.id))
 
-    const nextConnected = connectedKeys.includes(type)
-      ? connectedKeys.filter((k) => k !== type)
-      : [...connectedKeys, type]
+  const byPlatform = new Map(userRows.map((row) => [row.platform, row]))
 
-    setConnectedKeys(nextConnected)
-    localStorage.setItem("lemon_connected_integrations", JSON.stringify(nextConnected))
-    window.dispatchEvent(new Event("lemon_integrations_updated"))
-  }
-
-  if (!mounted) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <span className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    )
-  }
+  const connectedCount = userRows.filter((r) => r.status === "active").length
 
   return (
     <div className="flex flex-col gap-6">
@@ -53,60 +35,46 @@ export default function IntegrationsPage() {
         description="Connect your social media accounts to schedule and publish posts."
       />
 
+      <div className="text-xs font-medium text-muted-foreground">
+        {connectedCount} of {INTEGRATIONS.length} connected
+      </div>
+
       <section className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="divide-y divide-border">
-          {CHANNELS.map((channel) => {
-            const isConnected = connectedKeys.includes(channel.type)
+          {INTEGRATIONS.map((integration) => {
+            const row = byPlatform.get(integration.type)
+            const isConnected = row ? row.status === "active" : false
             return (
-              <div key={channel.type} className="flex items-center justify-between gap-4 px-5 py-4">
+              <div
+                key={integration.type}
+                className="flex items-center justify-between gap-4 px-5 py-4"
+              >
                 <div className="flex items-center gap-3">
                   <div
                     className="relative size-10 rounded-lg flex items-center justify-center text-white shrink-0 shadow-2xs border border-white/10"
-                    style={{ backgroundColor: channel.brandColor }}
+                    style={{ backgroundColor: integration.brandColor }}
                   >
-                    {/* Check if channel.icon is an svg string or React node */}
-                    {typeof channel.icon === 'function' ? (
-                      <channel.icon className="size-5 fill-current" />
-                    ) : (
-                      <HugeiconsIcon icon={channel.icon as any} className="size-5 fill-current" />
-                    )}
+                    <integration.icon className="size-5 fill-current" />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-sm font-semibold">{channel.label}</span>
+                    <span className="text-sm font-semibold">
+                      {integration.label}
+                    </span>
                     <span className="text-xs text-muted-foreground">
-                      {isConnected ? "Connected to workspace" : "Ready to configure"}
+                      {isConnected
+                        ? row?.handle
+                          ? `Connected as ${row.handle}`
+                          : "Connected to workspace"
+                        : "Ready to configure"}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {isConnected ? (
-                    <>
-                      <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10 hidden sm:inline-flex">
-                        Connected
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => toggleIntegration(channel.type)}
-                        className="cursor-pointer"
-                      >
-                        Disconnect
-                      </Button>
-                    </>
+                  {isConnected && row ? (
+                    <DisconnectButton integrationId={row.id} />
                   ) : (
-                    <>
-                      <Badge variant="outline" className="text-muted-foreground border-muted hidden sm:inline-flex">
-                        Disconnected
-                      </Badge>
-                      <Button
-                        size="sm"
-                        onClick={() => toggleIntegration(channel.type)}
-                        className="bg-warning text-warning-foreground hover:bg-warning/90 hover:text-warning-foreground font-semibold cursor-pointer shadow-xs transition-colors"
-                      >
-                        Connect
-                      </Button>
-                    </>
+                    <ConnectButton platform={integration.type} />
                   )}
                 </div>
               </div>

@@ -1,44 +1,25 @@
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
-import { Check, Coins, RefreshCw, Sparkles, Zap } from "lucide-react"
+import { Coins, RefreshCw } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { getAuth } from "@/lib/auth"
 import { getCreditState } from "@/lib/billing/credits"
 import {
   FREE_TIER_MONTHLY_CREDITS,
-  PLANS,
   TOPUP_PACKS,
   getPlan,
-  type Plan,
   type TopupPack,
 } from "@/lib/billing/packs"
 
 import { DashboardPageHeader } from "../../_common/dashboard-page-header"
 import { mainNav } from "../../_common/dashboard-nav"
-import { BuyTopupButton, SubscribeButton } from "./_components/buy-pack-button"
+import { BuyTopupButton } from "./_components/buy-pack-button"
+import { BillingPlansSection } from "./_components/billing-plans-section"
 
 export const dynamic = "force-dynamic"
 
 const page = mainNav.find((item) => item.name === "Billing")!
-
-const PLAN_ACCENT: Record<string, { gradient: string; iconBg: string; Icon: typeof Coins }> = {
-  starter: {
-    gradient: "from-sky-500/15 via-sky-500/5 to-transparent",
-    iconBg: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-    Icon: Coins,
-  },
-  creator: {
-    gradient: "from-primary/25 via-primary/10 to-transparent",
-    iconBg: "bg-primary/15 text-primary",
-    Icon: Sparkles,
-  },
-  pro: {
-    gradient: "from-amber-500/15 via-amber-500/5 to-transparent",
-    iconBg: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    Icon: Zap,
-  },
-}
 
 function formatDate(d: Date | null | undefined) {
   if (!d) return "—"
@@ -79,6 +60,7 @@ export default async function BillingPage() {
                 className="gap-1"
               >
                 {currentPlan ? currentPlan.label : "Free"}
+                {state.planBillingCycle ? ` · ${state.planBillingCycle}` : ""}
                 {state.planStatus ? ` · ${state.planStatus}` : ""}
               </Badge>
             </div>
@@ -131,28 +113,12 @@ export default async function BillingPage() {
         </div>
       </section>
 
-      {/* Subscription plans */}
-      <section className="flex flex-col gap-6">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-lg font-semibold tracking-tight">
-            Subscription plans
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Monthly credits reset on each renewal — pick the size that fits your output.
-          </p>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-3">
-          {PLANS.map((plan) => (
-            <PlanCard
-              key={plan.id}
-              plan={plan}
-              currentPlanId={state.planId}
-              planStatus={state.planStatus}
-            />
-          ))}
-        </div>
-      </section>
+      {/* Subscription plans + monthly/annual toggle */}
+      <BillingPlansSection
+        currentPlanId={state.planId}
+        currentBillingCycle={state.planBillingCycle}
+        planStatus={state.planStatus}
+      />
 
       {/* Top-ups */}
       <section className="flex flex-col gap-6">
@@ -180,93 +146,6 @@ export default async function BillingPage() {
         </p>
       </section>
     </div>
-  )
-}
-
-function PlanCard({
-  plan,
-  currentPlanId,
-  planStatus,
-}: {
-  plan: Plan
-  currentPlanId: string | null
-  planStatus: string | null
-}) {
-  const accent = PLAN_ACCENT[plan.id] ?? PLAN_ACCENT.starter
-  const Icon = accent.Icon
-  const isCurrent = currentPlanId === plan.id
-
-  return (
-    <article
-      className={`group relative flex flex-col overflow-hidden rounded-xl border bg-card p-6 transition-all hover:-translate-y-0.5 hover:shadow-lg ${
-        plan.popular
-          ? "border-primary/40 ring-1 ring-primary/30"
-          : "border-border"
-      } ${isCurrent ? "ring-2 ring-primary" : ""}`}
-    >
-      <div
-        className={`pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b ${accent.gradient}`}
-      />
-
-      {plan.popular && !isCurrent ? (
-        <Badge className="absolute right-4 top-4 gap-1">
-          <Sparkles className="size-3" />
-          Popular
-        </Badge>
-      ) : null}
-
-      {isCurrent ? (
-        <Badge variant="secondary" className="absolute right-4 top-4 gap-1">
-          <Check className="size-3" />
-          Current
-        </Badge>
-      ) : null}
-
-      <div className="relative flex flex-col gap-5">
-        <div className="flex items-center gap-3">
-          <div className={`grid size-10 place-items-center rounded-lg ${accent.iconBg}`}>
-            <Icon className="size-5" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-muted-foreground">
-              {plan.label}
-            </span>
-            <span className="text-xs text-muted-foreground/70">
-              {plan.monthlyCredits.toLocaleString()} credits / month
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-baseline gap-1">
-          <span className="text-4xl font-semibold tracking-tight">
-            ${plan.priceUsd}
-          </span>
-          <span className="text-sm text-muted-foreground">/ month</span>
-        </div>
-
-        <p className="text-sm text-muted-foreground">{plan.description}</p>
-
-        <ul className="flex flex-col gap-2.5">
-          {plan.features.map((feature) => (
-            <li
-              key={feature}
-              className="flex items-start gap-2 text-sm text-foreground/90"
-            >
-              <Check className="mt-0.5 size-4 shrink-0 text-primary" />
-              <span>{feature}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-2">
-          <SubscribeButton
-            planId={plan.id}
-            currentPlanId={currentPlanId}
-            planStatus={planStatus}
-          />
-        </div>
-      </div>
-    </article>
   )
 }
 

@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import {
-  Check,
   ChevronsUpDown,
   CreditCard,
   Leaf,
@@ -11,7 +10,6 @@ import {
   Moon,
   Palette,
   Plus,
-  PlusCircle,
   Settings as SettingsIcon,
   Sun,
   User as UserIcon,
@@ -19,8 +17,8 @@ import {
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { CHANNELS, ChannelTypeEnum } from "@/lib/constants/social-platforms"
+import { INTEGRATIONS } from "@/lib/constants/integrations"
+import type { IntegrationListResponse } from "@/app/api/integrations/route"
 import { APP_NAME } from "@/lib/constants/app"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -81,24 +79,26 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
   const BrandIcon = mainNav[0].icon
 
   useEffect(() => {
-    function loadConnected() {
+    let cancelled = false
+    async function loadConnected() {
       try {
-        const stored = localStorage.getItem("lemon_connected_integrations")
-        if (stored) {
-          setConnectedKeys(JSON.parse(stored))
-        } else {
-          setConnectedKeys([])
-        }
+        const res = await fetch("/api/integrations?filter=connected", {
+          credentials: "include",
+        })
+        if (!res.ok || cancelled) return
+        const data = (await res.json()) as IntegrationListResponse
+        if (cancelled) return
+        setConnectedKeys(data.integrations.map((i) => i.platform))
       } catch (e) {
         console.error(e)
       }
     }
 
     loadConnected()
-
-    window.addEventListener("lemon_integrations_updated", loadConnected)
+    window.addEventListener("integrations:updated", loadConnected)
     return () => {
-      window.removeEventListener("lemon_integrations_updated", loadConnected)
+      cancelled = true
+      window.removeEventListener("integrations:updated", loadConnected)
     }
   }, [])
 
@@ -182,67 +182,40 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
             </SidebarGroupContent>
           </SidebarGroup>
 
-          <SidebarGroup className="mt-2">
-            <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/80 uppercase px-2 mb-1">
+          <SidebarGroup className="mt-3">
+            <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/80 uppercase px-2 mb-1.5">
               Connect Integrations
             </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu className="gap-0.5">
-                {CHANNELS.filter(c =>
-                  c.type === ChannelTypeEnum.TWITTER ||
-                  c.type === ChannelTypeEnum.LINKEDIN ||
-                  c.type === ChannelTypeEnum.INSTAGRAM ||
-                  c.type === ChannelTypeEnum.THREADS
-                ).map((integration) => {
-                  const isConnected = connectedKeys.includes(integration.type)
-                  return (
-                    <SidebarMenuItem key={integration.type}>
+            <SidebarGroupContent className="px-2">
+              <Link
+                href="/dashboard/integrations"
+                className="group/integrations flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-sidebar-accent/40 px-3 py-2.5 hover:border-border hover:bg-sidebar-accent transition-colors"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex -space-x-1.5 shrink-0">
+                    {INTEGRATIONS.slice(0, 4).map((integration) => (
                       <div
-                        onClick={() => router.push("/dashboard/integrations")}
-                        className="flex items-center gap-3 px-2 py-1.5 hover:bg-sidebar-accent rounded-md cursor-pointer transition-colors group/integration"
+                        key={integration.type}
+                        className="size-6 rounded-md ring-2 ring-sidebar flex items-center justify-center text-white"
+                        style={{ backgroundColor: integration.brandColor }}
                       >
-                        <div
-                          className="relative size-7 rounded-md flex items-center justify-center text-white shrink-0 shadow-2xs border border-white/10"
-                          style={{ backgroundColor: integration.brandColor }}
-                        >
-                          <integration.icon className="size-3.5 fill-current" />
-                          {isConnected ? (
-                            <div className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full bg-emerald-500 border border-emerald-600 flex items-center justify-center text-white shadow-3xs animate-in zoom-in-50 duration-200">
-                              <Check className="size-1.5 stroke-[4px]" />
-                            </div>
-                          ) : (
-                            <div className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full bg-background border border-border flex items-center justify-center text-foreground shadow-3xs">
-                              <Plus className="size-1.5 stroke-[4px]" />
-                            </div>
-                          )}
-                        </div>
-                        <span className="text-sm font-medium text-sidebar-foreground/80 group-hover/integration:text-sidebar-foreground transition-colors">
-                          {integration.label}
-                        </span>
+                        <integration.icon className="size-3 fill-current" />
                       </div>
-                    </SidebarMenuItem>
-                  )
-                })}
-                <SidebarMenuItem>
-                  <Link
-                    href="/dashboard/integrations"
-                    className="flex items-center gap-3 px-2 py-1.5 hover:bg-sidebar-accent rounded-md cursor-pointer text-muted-foreground hover:text-foreground transition-colors group/more w-full"
-                  >
-                    <div className="size-7 flex items-center justify-center shrink-0">
-                      <PlusCircle className="size-4.5 text-muted-foreground/80 group-hover/more:text-foreground transition-colors" />
-                    </div>
-                    <span className="text-sm font-medium">More integrations</span>
-                  </Link>
-                </SidebarMenuItem>
-              </SidebarMenu>
+                    ))}
+                  </div>
+                  <span className="text-sm font-medium truncate">
+                    Integrations
+                  </span>
+                </div>
+                <span className="text-xs font-mono tabular-nums text-muted-foreground group-hover/integrations:text-foreground transition-colors">
+                  {connectedKeys.length}/{INTEGRATIONS.length}
+                </span>
+              </Link>
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="px-2 py-3 gap-2">
-          <div className="px-2 text-[10px] tracking-wide text-muted-foreground/75 font-semibold uppercase">
-            {connectedKeys.length}/8 integrations connected
-          </div>
+        <SidebarFooter className="px-2 py-3 gap-3">
           <SidebarMenu>
             <SidebarMenuItem>
               <DropdownMenu>

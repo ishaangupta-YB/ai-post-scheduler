@@ -20,15 +20,22 @@ async function startCheckout(
 
 export function SubscribeButton({
   planId,
+  billingCycle,
   currentPlanId,
+  currentBillingCycle,
   planStatus,
 }: {
   planId: string
+  billingCycle: "monthly" | "annual"
   currentPlanId: string | null
+  currentBillingCycle: "monthly" | "annual" | null
   planStatus: string | null
 }) {
   const [isPending, setIsPending] = useState(false)
-  const isCurrent = currentPlanId === planId && planStatus === "active"
+  const isCurrent =
+    currentPlanId === planId &&
+    currentBillingCycle === billingCycle &&
+    planStatus === "active"
 
   async function handleClick() {
     setIsPending(true)
@@ -36,6 +43,7 @@ export function SubscribeButton({
       const data = await startCheckout({
         purchaseType: "subscription",
         planId,
+        billingCycle,
       })
       if (!data.checkoutUrl) {
         toast.error(data.error ?? "Failed to start checkout")

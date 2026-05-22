@@ -10,6 +10,10 @@ interface CloudflareEnv {
   DODO_PLAN_STARTER?: string
   DODO_PLAN_CREATOR?: string
   DODO_PLAN_PRO?: string
+  // Subscription plan products (recurring annual)
+  DODO_PLAN_STARTER_ANNUAL?: string
+  DODO_PLAN_CREATOR_ANNUAL?: string
+  DODO_PLAN_PRO_ANNUAL?: string
   // One-time top-up SKUs (never expire in our ledger)
   DODO_TOPUP_500?: string
 }

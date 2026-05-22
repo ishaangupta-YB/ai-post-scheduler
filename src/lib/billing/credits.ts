@@ -11,6 +11,7 @@ import {
   FREE_TIER_MONTHLY_CREDITS,
   FREE_TIER_PERIOD_DAYS,
   getPlanMonthlyAllotment,
+  type BillingCycle,
 } from "./packs"
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -32,6 +33,7 @@ export type CreditState = {
   total: number
   planId: string | null
   planStatus: string | null
+  planBillingCycle: BillingCycle | null
   planPeriodEnd: Date | null
   dodoSubscriptionId: string | null
 }
@@ -52,6 +54,7 @@ export async function getCreditState(userId: string): Promise<CreditState> {
       topup: users.topupCreditBalance,
       planId: users.planId,
       planStatus: users.planStatus,
+      planBillingCycle: users.planBillingCycle,
       planPeriodEnd: users.planPeriodEnd,
       dodoSubscriptionId: users.dodoSubscriptionId,
     })
@@ -69,6 +72,7 @@ export async function getCreditState(userId: string): Promise<CreditState> {
     total: row.monthly + row.topup,
     planId: row.planId,
     planStatus: row.planStatus,
+    planBillingCycle: row.planBillingCycle,
     planPeriodEnd: row.planPeriodEnd,
     dodoSubscriptionId: row.dodoSubscriptionId,
   }
@@ -340,15 +344,22 @@ export async function resetMonthlyCreditsIfDue(
 type ApplyActiveArgs = {
   userId: string
   planId: string
+  billingCycle: BillingCycle | null
   dodoSubscriptionId: string
+  // For annual subscribers we DON'T use Dodo's yearly period_end as our monthly reset
+  // anchor — credits still refresh monthly, so this is always +30 days from now.
   periodEnd: Date
 }
 
 /**
  * Activates a subscription on a user — called when Dodo fires `subscription.active`.
- * Sets planId/planStatus/dodoSubscriptionId/planPeriodEnd and resets the monthly pool
- * to the plan's allotment. If the user already had monthly credits, they're forfeited
- * (the new plan grant supersedes them).
+ * Sets planId/planStatus/dodoSubscriptionId/planBillingCycle/planPeriodEnd and resets
+ * the monthly pool to the plan's allotment. If the user already had monthly credits,
+ * they're forfeited (the new plan grant supersedes them).
+ *
+ * Note on billing cycle: planPeriodEnd is the next *monthly credit refresh*, NOT the
+ * next Dodo charge. Annual subscribers get monthly credit grants driven by
+ * resetMonthlyCreditsIfDue, while Dodo charges them once a year.
  */
 export async function applySubscriptionActive(
   args: ApplyActiveArgs,
@@ -369,6 +380,7 @@ export async function applySubscriptionActive(
     .set({
       planId: args.planId,
       planStatus: "active",
+      planBillingCycle: args.billingCycle,
       planPeriodEnd: args.periodEnd,
       dodoSubscriptionId: args.dodoSubscriptionId,
       monthlyCreditBalance: allotment,
@@ -408,10 +420,14 @@ type ApplyRenewedArgs = {
 }
 
 /**
- * Recurring monthly charge from Dodo — `payment.succeeded` with a subscription_id.
- * Resets monthly to the plan's allotment and advances planPeriodEnd. If we can't
- * find a user with this subscription id, the event is silently ignored (it will
- * still have been recorded into payment_events for audit).
+ * Recurring charge from Dodo — `payment.succeeded` with a subscription_id. For monthly
+ * subscribers this fires every 30 days; for annual subscribers it fires once a year.
+ * Either way, we reset monthly credits to the plan allotment and advance planPeriodEnd
+ * by 30 days. Annual subscribers get their monthly refreshes for the intervening 11
+ * months from resetMonthlyCreditsIfDue (lazy reset).
+ *
+ * If we can't find a user with this subscription id, the event is silently ignored
+ * (it will still have been recorded into payment_events for audit).
  */
 export async function applySubscriptionRenewed(
   args: ApplyRenewedArgs,
@@ -533,6 +549,7 @@ async function loadPlanFields(userId: string) {
     .select({
       planId: users.planId,
       planStatus: users.planStatus,
+      planBillingCycle: users.planBillingCycle,
       planPeriodEnd: users.planPeriodEnd,
       dodoSubscriptionId: users.dodoSubscriptionId,
     })
@@ -542,6 +559,7 @@ async function loadPlanFields(userId: string) {
   return {
     planId: row?.planId ?? null,
     planStatus: row?.planStatus ?? null,
+    planBillingCycle: row?.planBillingCycle ?? null,
     planPeriodEnd: row?.planPeriodEnd ?? null,
     dodoSubscriptionId: row?.dodoSubscriptionId ?? null,
   }

@@ -3,7 +3,6 @@ import { getCloudflareContext } from "@opennextjs/cloudflare"
 
 import { getDb, paymentEvents } from "@/db"
 import {
-  getSubscriptionPeriodEnd,
   verifyWebhookSignature,
   type DodoEvent,
 } from "@/lib/billing/dodo"
@@ -111,16 +110,17 @@ async function handlePaymentSucceeded(evt: DodoEvent, webhookId: string) {
   const subscriptionId = evt.data?.subscription_id
   const paymentId = evt.data?.payment_id ?? webhookId
 
-  // A subscription's recurring monthly charge — reset monthly + advance period_end.
+  // A subscription's recurring charge (monthly or annual) — reset monthly credits +
+  // advance our monthly refresh anchor by 30 days. We intentionally ignore Dodo's
+  // current_period_end here: for annual subscribers Dodo charges once a year, but our
+  // credit grants stay monthly, so planPeriodEnd is always +30d regardless of cycle.
   // Subscription's INITIAL charge ALSO sends payment.succeeded, but subscription.active
-  // is what actually links the subscription to the user. So if subscriptionId is set
-  // AND we already have a user with that subscriptionId, treat it as a renewal. The
-  // applySubscriptionRenewed helper is a no-op if the subscription isn't known yet.
+  // is what actually links the subscription to the user. The applySubscriptionRenewed
+  // helper is a no-op if the subscription isn't known yet.
   if (subscriptionId) {
-    const periodEnd = getSubscriptionPeriodEnd(evt) ?? defaultNextPeriodEnd()
     await applySubscriptionRenewed({
       dodoSubscriptionId: subscriptionId,
-      periodEnd,
+      periodEnd: nextMonthlyAnchor(),
       paymentId,
     })
     return NextResponse.json({ ok: true, action: "subscription_renewed" })
@@ -157,17 +157,20 @@ async function handleSubscriptionActive(evt: DodoEvent) {
   const userId = meta.user_id
   const planId = meta.plan_id
   const subscriptionId = evt.data?.subscription_id
+  const billingCycle =
+    meta.billing_cycle === "annual" ? "annual" : "monthly"
 
   if (!userId || !planId || !subscriptionId) {
     return NextResponse.json({ ok: true, skipped: "missing identifiers" })
   }
 
-  const periodEnd = getSubscriptionPeriodEnd(evt) ?? defaultNextPeriodEnd()
+  // planPeriodEnd is OUR monthly credit refresh anchor, not Dodo's cycle. Always +30d.
   await applySubscriptionActive({
     userId,
     planId,
+    billingCycle,
     dodoSubscriptionId: subscriptionId,
-    periodEnd,
+    periodEnd: nextMonthlyAnchor(),
   })
   return NextResponse.json({ ok: true, action: "subscription_activated" })
 }
@@ -190,7 +193,7 @@ async function handleSubscriptionPastDue(evt: DodoEvent) {
   return NextResponse.json({ ok: true, action: "subscription_past_due" })
 }
 
-/** Fallback when Dodo doesn't send a period_end — 30 days from now. */
-function defaultNextPeriodEnd(): Date {
+/** Next monthly credit refresh anchor — always 30 days from now, irrespective of billing cycle. */
+function nextMonthlyAnchor(): Date {
   return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 }

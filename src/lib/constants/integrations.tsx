@@ -1,7 +1,6 @@
 import * as React from "react"
-import type { IconSvgElement } from "@hugeicons/react"
 
-export enum ChannelTypeEnum {
+export enum IntegrationTypeEnum {
   TWITTER = "TWITTER",
   INSTAGRAM = "INSTAGRAM",
   THREADS = "THREADS",
@@ -61,65 +60,65 @@ const TiktokIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 )
 
-export const CHANNEL_TYPE_ICONS: Record<ChannelTypeEnum, React.ComponentType<{ className?: string }>> = {
-  [ChannelTypeEnum.TWITTER]:   TwitterIcon,
-  [ChannelTypeEnum.LINKEDIN]:  LinkedinIcon,
-  [ChannelTypeEnum.INSTAGRAM]: InstagramIcon,
-  [ChannelTypeEnum.THREADS]:   ThreadsIcon,
-  [ChannelTypeEnum.FACEBOOK]:  FacebookIcon,
-  [ChannelTypeEnum.BLUESKY]:   BlueskyIcon,
-  [ChannelTypeEnum.YOUTUBE]:   YoutubeIcon,
-  [ChannelTypeEnum.TIKTOK]:    TiktokIcon,
+export const INTEGRATION_TYPE_ICONS: Record<IntegrationTypeEnum, React.ComponentType<{ className?: string }>> = {
+  [IntegrationTypeEnum.TWITTER]:   TwitterIcon,
+  [IntegrationTypeEnum.LINKEDIN]:  LinkedinIcon,
+  [IntegrationTypeEnum.INSTAGRAM]: InstagramIcon,
+  [IntegrationTypeEnum.THREADS]:   ThreadsIcon,
+  [IntegrationTypeEnum.FACEBOOK]:  FacebookIcon,
+  [IntegrationTypeEnum.BLUESKY]:   BlueskyIcon,
+  [IntegrationTypeEnum.YOUTUBE]:   YoutubeIcon,
+  [IntegrationTypeEnum.TIKTOK]:    TiktokIcon,
 }
 
-export const CHANNEL_TYPE_URLS: Record<ChannelTypeEnum, string> = {
-  [ChannelTypeEnum.TWITTER]:   "https://x.com",
-  [ChannelTypeEnum.LINKEDIN]:  "https://linkedin.com",
-  [ChannelTypeEnum.INSTAGRAM]: "https://instagram.com",
-  [ChannelTypeEnum.THREADS]:   "https://threads.com",
-  [ChannelTypeEnum.FACEBOOK]:  "https://facebook.com",
-  [ChannelTypeEnum.BLUESKY]:   "https://bluesky.com",
-  [ChannelTypeEnum.YOUTUBE]:   "https://youtube.com",
-  [ChannelTypeEnum.TIKTOK]:    "https://tiktok.com",
+export const INTEGRATION_TYPE_URLS: Record<IntegrationTypeEnum, string> = {
+  [IntegrationTypeEnum.TWITTER]:   "https://x.com",
+  [IntegrationTypeEnum.LINKEDIN]:  "https://linkedin.com",
+  [IntegrationTypeEnum.INSTAGRAM]: "https://instagram.com",
+  [IntegrationTypeEnum.THREADS]:   "https://threads.com",
+  [IntegrationTypeEnum.FACEBOOK]:  "https://facebook.com",
+  [IntegrationTypeEnum.BLUESKY]:   "https://bluesky.com",
+  [IntegrationTypeEnum.YOUTUBE]:   "https://youtube.com",
+  [IntegrationTypeEnum.TIKTOK]:    "https://tiktok.com",
 }
 
-export const CHANNEL_TYPE_LABELS: Record<ChannelTypeEnum, string> = {
-  [ChannelTypeEnum.TWITTER]:   "Twitter / X",
-  [ChannelTypeEnum.LINKEDIN]:  "LinkedIn",
-  [ChannelTypeEnum.INSTAGRAM]: "Instagram",
-  [ChannelTypeEnum.THREADS]:   "Threads",
-  [ChannelTypeEnum.FACEBOOK]:  "Facebook",
-  [ChannelTypeEnum.BLUESKY]:   "Bluesky",
-  [ChannelTypeEnum.YOUTUBE]:   "YouTube",
-  [ChannelTypeEnum.TIKTOK]:    "TikTok",
+export const INTEGRATION_TYPE_LABELS: Record<IntegrationTypeEnum, string> = {
+  [IntegrationTypeEnum.TWITTER]:   "Twitter / X",
+  [IntegrationTypeEnum.LINKEDIN]:  "LinkedIn",
+  [IntegrationTypeEnum.INSTAGRAM]: "Instagram",
+  [IntegrationTypeEnum.THREADS]:   "Threads",
+  [IntegrationTypeEnum.FACEBOOK]:  "Facebook",
+  [IntegrationTypeEnum.BLUESKY]:   "Bluesky",
+  [IntegrationTypeEnum.YOUTUBE]:   "YouTube",
+  [IntegrationTypeEnum.TIKTOK]:    "TikTok",
 }
 
 // Official brand colors for chip/badge/icon tinting.
-export const CHANNEL_TYPE_COLORS: Record<ChannelTypeEnum, string> = {
-  [ChannelTypeEnum.TWITTER]:   "#000000",
-  [ChannelTypeEnum.LINKEDIN]:  "#2867B2",
-  [ChannelTypeEnum.INSTAGRAM]: "#E4405F",
-  [ChannelTypeEnum.THREADS]:   "#000000",
-  [ChannelTypeEnum.FACEBOOK]:  "#1877F2",
-  [ChannelTypeEnum.BLUESKY]:   "#1285FE",
-  [ChannelTypeEnum.YOUTUBE]:   "#FF0000",
-  [ChannelTypeEnum.TIKTOK]:    "#000000",
+export const INTEGRATION_TYPE_COLORS: Record<IntegrationTypeEnum, string> = {
+  [IntegrationTypeEnum.TWITTER]:   "#000000",
+  [IntegrationTypeEnum.LINKEDIN]:  "#2867B2",
+  [IntegrationTypeEnum.INSTAGRAM]: "#E4405F",
+  [IntegrationTypeEnum.THREADS]:   "#000000",
+  [IntegrationTypeEnum.FACEBOOK]:  "#1877F2",
+  [IntegrationTypeEnum.BLUESKY]:   "#1285FE",
+  [IntegrationTypeEnum.YOUTUBE]:   "#FF0000",
+  [IntegrationTypeEnum.TIKTOK]:    "#000000",
 }
 
 // Hard per-post character ceilings enforced by each network.
-export const CHANNEL_TYPE_CHAR_LIMITS: Record<ChannelTypeEnum, number> = {
-  [ChannelTypeEnum.TWITTER]:   280,
-  [ChannelTypeEnum.LINKEDIN]:  3000,
-  [ChannelTypeEnum.INSTAGRAM]: 2200,
-  [ChannelTypeEnum.THREADS]:   500,
-  [ChannelTypeEnum.FACEBOOK]:  63206,
-  [ChannelTypeEnum.BLUESKY]:   300,
-  [ChannelTypeEnum.YOUTUBE]:   100,
-  [ChannelTypeEnum.TIKTOK]:    100,
+export const INTEGRATION_TYPE_CHAR_LIMITS: Record<IntegrationTypeEnum, number> = {
+  [IntegrationTypeEnum.TWITTER]:   280,
+  [IntegrationTypeEnum.LINKEDIN]:  3000,
+  [IntegrationTypeEnum.INSTAGRAM]: 2200,
+  [IntegrationTypeEnum.THREADS]:   500,
+  [IntegrationTypeEnum.FACEBOOK]:  63206,
+  [IntegrationTypeEnum.BLUESKY]:   300,
+  [IntegrationTypeEnum.YOUTUBE]:   100,
+  [IntegrationTypeEnum.TIKTOK]:    100,
 }
 
-export type Channel = {
-  type: ChannelTypeEnum
+export type Integration = {
+  type: IntegrationTypeEnum
   label: string
   url: string
   brandColor: string
@@ -128,50 +127,50 @@ export type Channel = {
 }
 
 // Canonical ordered list — use this anywhere you need to iterate every supported network
-// (channel pickers, settings rows, posting matrix, etc.).
-export const CHANNELS: readonly Channel[] = [
-  ChannelTypeEnum.TWITTER,
-  ChannelTypeEnum.LINKEDIN,
-  ChannelTypeEnum.INSTAGRAM,
-  ChannelTypeEnum.THREADS,
-  ChannelTypeEnum.FACEBOOK,
-  ChannelTypeEnum.BLUESKY,
-  ChannelTypeEnum.YOUTUBE,
-  ChannelTypeEnum.TIKTOK,
+// (integration pickers, settings rows, posting matrix, etc.).
+export const INTEGRATIONS: readonly Integration[] = [
+  IntegrationTypeEnum.TWITTER,
+  IntegrationTypeEnum.LINKEDIN,
+  IntegrationTypeEnum.INSTAGRAM,
+  IntegrationTypeEnum.THREADS,
+  IntegrationTypeEnum.FACEBOOK,
+  IntegrationTypeEnum.BLUESKY,
+  IntegrationTypeEnum.YOUTUBE,
+  IntegrationTypeEnum.TIKTOK,
 ].map((type) => ({
   type,
-  label: CHANNEL_TYPE_LABELS[type],
-  url: CHANNEL_TYPE_URLS[type],
-  brandColor: CHANNEL_TYPE_COLORS[type],
-  charLimit: CHANNEL_TYPE_CHAR_LIMITS[type],
-  icon: CHANNEL_TYPE_ICONS[type],
+  label: INTEGRATION_TYPE_LABELS[type],
+  url: INTEGRATION_TYPE_URLS[type],
+  brandColor: INTEGRATION_TYPE_COLORS[type],
+  charLimit: INTEGRATION_TYPE_CHAR_LIMITS[type],
+  icon: INTEGRATION_TYPE_ICONS[type],
 }))
 
-export function getChannelUrl(type: ChannelTypeEnum | undefined): string {
+export function getIntegrationUrl(type: IntegrationTypeEnum | undefined): string {
   if (!type) return ""
-  return CHANNEL_TYPE_URLS[type]
+  return INTEGRATION_TYPE_URLS[type]
 }
 
-export function getChannelIcon(
-  type: ChannelTypeEnum | undefined,
+export function getIntegrationIcon(
+  type: IntegrationTypeEnum | undefined,
 ): React.ComponentType<{ className?: string }> | null {
   if (!type) return null
-  return CHANNEL_TYPE_ICONS[type]
+  return INTEGRATION_TYPE_ICONS[type]
 }
 
-export function getChannelLabel(type: ChannelTypeEnum | undefined): string {
+export function getIntegrationLabel(type: IntegrationTypeEnum | undefined): string {
   if (!type) return ""
-  return CHANNEL_TYPE_LABELS[type]
+  return INTEGRATION_TYPE_LABELS[type]
 }
 
-export function getChannelColor(type: ChannelTypeEnum | undefined): string {
+export function getIntegrationColor(type: IntegrationTypeEnum | undefined): string {
   if (!type) return ""
-  return CHANNEL_TYPE_COLORS[type]
+  return INTEGRATION_TYPE_COLORS[type]
 }
 
-export function getChannelCharLimit(
-  type: ChannelTypeEnum | undefined,
+export function getIntegrationCharLimit(
+  type: IntegrationTypeEnum | undefined,
 ): number {
   if (!type) return 0
-  return CHANNEL_TYPE_CHAR_LIMITS[type]
+  return INTEGRATION_TYPE_CHAR_LIMITS[type]
 }

@@ -108,6 +108,7 @@ export default async function ProfilePage() {
               ) : null}
               <Badge variant="outline" className="gap-1">
                 {currentPlan ? currentPlan.label : "Free"}
+                {state.planBillingCycle ? ` · ${state.planBillingCycle}` : ""}
                 {state.planStatus ? ` · ${state.planStatus}` : ""}
               </Badge>
             </div>
@@ -191,6 +192,7 @@ export default async function ProfilePage() {
             value={user.emailVerified ? "Yes" : "No"}
           />
           <Row label="Plan" value={currentPlan?.label ?? "Free"} />
+          <Row label="Billing cycle" value={state.planBillingCycle ?? "—"} />
           <Row label="Plan status" value={state.planStatus ?? "—"} />
           <Row label="Period ends" value={formatDate(state.planPeriodEnd)} />
           <Row label="Joined" value={formatDate(user.createdAt)} />

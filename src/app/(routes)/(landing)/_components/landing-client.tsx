@@ -21,10 +21,9 @@ import {
 import { toast } from "sonner"
 import { authClient } from "@/lib/auth-client"
 import { useTheme } from "next-themes"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { CHANNELS, ChannelTypeEnum } from "@/lib/constants/social-platforms"
+import { INTEGRATIONS, IntegrationTypeEnum } from "@/lib/constants/integrations"
 import { APP_NAME } from "@/lib/constants/app"
-import { PLANS } from "@/lib/billing/packs"
+import { PLANS, getAnnualSavingsPercent } from "@/lib/billing/packs"
 
 // ───────── Google Sign In Helper ─────────
 async function triggerGoogleSignIn() {
@@ -124,17 +123,17 @@ const ANIMATION_STEPS = [
   {
     prompt: "Write a thread about why databases need connection pooling...",
     draft: "1/ Why do databases choke under sudden traffic spikes? Usually, it's not the queries—it's connection overhead. \n\nEvery time a client connects, the DB forks a process. This consumes memory and CPU before the query even starts.",
-    channels: [ChannelTypeEnum.TWITTER]
+    integrations: [IntegrationTypeEnum.TWITTER]
   },
   {
     prompt: "Draft a LinkedIn announcement for CalmPost launch...",
     draft: "Staring at a blank screen on Sunday night is the worst way to do social media. \n\nToday, we're launching CalmPost. Capture ideas in a click, let AI draft in your exact tone, and queue multi-channel on autopilot.",
-    channels: [ChannelTypeEnum.LINKEDIN]
+    integrations: [IntegrationTypeEnum.LINKEDIN]
   },
   {
     prompt: "Create a short tweet about Tailwind CSS v4 speed...",
     draft: "Tailwind v4 is an absolute rocket. Rust-powered engine compiling 10x faster, zero-config setup, native cascade layers. \n\nOur bundle sizes dropped by 18% with zero code changes. Huge win.",
-    channels: [ChannelTypeEnum.TWITTER, ChannelTypeEnum.LINKEDIN]
+    integrations: [IntegrationTypeEnum.TWITTER, IntegrationTypeEnum.LINKEDIN]
   }
 ]
 
@@ -244,8 +243,8 @@ export function LivePostDraftCard() {
 
         <div className="live-post-card__integrations">
           <span className="text-muted-foreground/60 mr-1">integrations:</span>
-          {CHANNELS.filter(c => c.type === ChannelTypeEnum.TWITTER || c.type === ChannelTypeEnum.LINKEDIN).map((integration) => {
-            const isActive = currentStep.channels.includes(integration.type)
+          {INTEGRATIONS.filter(c => c.type === IntegrationTypeEnum.TWITTER || c.type === IntegrationTypeEnum.LINKEDIN).map((integration) => {
+            const isActive = currentStep.integrations.includes(integration.type)
             return (
               <span
                 key={integration.type}
@@ -266,8 +265,8 @@ export function LivePostDraftCard() {
 export function WorkbenchConsole() {
   const [activeTab, setActiveTab] = useState<"queue" | "ideas" | "analytics">("queue")
   const [stats, setStats] = useState({ queue: 14, reach: 98.4 })
-  const twitter = CHANNELS.find(c => c.type === ChannelTypeEnum.TWITTER)
-  const linkedin = CHANNELS.find(c => c.type === ChannelTypeEnum.LINKEDIN)
+  const twitter = INTEGRATIONS.find(c => c.type === IntegrationTypeEnum.TWITTER)
+  const linkedin = INTEGRATIONS.find(c => c.type === IntegrationTypeEnum.LINKEDIN)
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -458,6 +457,9 @@ export function PricingSection() {
   const [isAnnual, setIsAnnual] = useState(false)
   const [isPending, setIsPending] = useState(false)
 
+  // Use the largest savings across plans for the toggle badge (all 3 use the same %, but stay future-proof).
+  const maxSavings = Math.max(...PLANS.map(getAnnualSavingsPercent))
+
   async function handleAction() {
     setIsPending(true)
     await triggerGoogleSignIn()
@@ -485,14 +487,16 @@ export function PricingSection() {
               className={isAnnual ? "active" : ""}
               onClick={() => setIsAnnual(true)}
             >
-              Annual <span className="save">save 20%</span>
+              Annual <span className="save">save {maxSavings}%</span>
             </button>
           </div>
         </div>
 
         <div className="lp-pricing__grid">
           {PLANS.map((plan) => {
-            const price = isAnnual ? Math.round(plan.priceUsd * 0.8) : plan.priceUsd
+            const displayedMonthly = isAnnual
+              ? Math.round((plan.annualPriceUsd / 12) * 100) / 100
+              : plan.monthlyPriceUsd
             const isFeatured = plan.popular
 
             return (
@@ -500,7 +504,7 @@ export function PricingSection() {
                 {isFeatured && <span className="lp-tier__badge">Most creators choose this</span>}
                 <div className="lp-tier__name">{plan.label}</div>
                 <div className="lp-tier__price">
-                  <span>${price}</span>
+                  <span>${displayedMonthly}</span>
                   <small>/ mo</small>
                 </div>
                 <p className="lp-tier__desc">{plan.description}</p>

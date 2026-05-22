@@ -22,6 +22,8 @@ export const users = sqliteTable(
     // 'active' | 'cancelled' | 'past_due' (or null for free tier).
     planId: text("plan_id"),
     planStatus: text("plan_status"),
+    // 'monthly' or 'annual' — set on subscription.active from Dodo metadata. null for free tier.
+    planBillingCycle: text("plan_billing_cycle", { enum: ["monthly", "annual"] }),
     // When the current monthly period ends. For free tier, advanced lazily by
     // resetMonthlyCreditsIfDue. For paid plans, driven by Dodo subscription webhooks.
     planPeriodEnd: integer("plan_period_end", { mode: "timestamp_ms" }),

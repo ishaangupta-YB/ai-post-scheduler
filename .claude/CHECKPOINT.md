@@ -416,3 +416,79 @@ User requested a cleaner separation between Settings and Integrations, reverting
 
 ### Verified
 - `npm run build` clean, new routes registered.
+
+---
+
+## 15. Session log — 2026-05-22 (session 5 — Annual subs · channel→integration rename · integrations/ideas/scheduled_posts schema)
+
+User asked to (1) add monthly **and annual** subscription billing, (2) rename the codebase noun `channel` → `integration` globally, and (3) wire a real DB-backed integrations system (plus tables for ideas + scheduled posts), feeding `/dashboard/integrations` from the database instead of localStorage. Plan file: `/Users/ishaan/.claude/plans/start-with-where-we-fizzy-moore.md`.
+
+### Decisions taken (via AskUserQuestion)
+- **Annual = monthly credit resets** (not yearly bulk grant). Annual is purely a billing-cycle discount; users still get monthly credit refreshes. `planPeriodEnd` is therefore our *monthly refresh anchor*, NOT Dodo's billing-cycle end — always advanced by +30 days regardless of cycle.
+- **Annual discount = ~17% off** ("2 months free"): Starter $50/yr, Creator $200/yr, Pro $700/yr.
+- **One integration per platform per user** — `UNIQUE (user_id, platform)` index on `integrations`. Multi-account-per-platform would need a destructive migration to drop the unique index.
+- **Regenerate `0000_init.sql`** as a single migration (no prod users) instead of appending 0001/0002.
+
+### Track A — Annual subscriptions
+- **`src/db/auth-schema.ts`:** ADD `planBillingCycle: text("plan_billing_cycle", { enum: ["monthly","annual"] })` to `users`.
+- **`src/lib/billing/packs.ts`:** Rewrote `Plan` shape — REMOVED `priceUsd`, ADDED `monthlyPriceUsd` + `annualPriceUsd`. Added `BillingCycle` type, `getPlanPricing(plan, cycle)`, `getAnnualSavingsPercent(plan)`. Extended `getDodoPlanProductId(env, planId, cycle)` to switch between monthly and annual product IDs.
+- **`src/app/api/billing/checkout/route.ts`:** Accepts `{ billingCycle: "monthly" | "annual" }` in body; defaults to monthly. Passes cycle to product-id lookup. Includes `billing_cycle` in Dodo metadata.
+- **`src/app/api/webhooks/dodo/route.ts`:** `handleSubscriptionActive` reads `meta.billing_cycle` and forwards it. **Crucial:** stopped using `getSubscriptionPeriodEnd(evt)` for `planPeriodEnd` — that would lock annual subscribers out of monthly refreshes for a year. Replaced with `nextMonthlyAnchor()` (always +30d). `getSubscriptionPeriodEnd` import dropped from this file (helper still exported from `dodo.ts` for future use).
+- **`src/lib/billing/credits.ts`:** `applySubscriptionActive(args)` gained `billingCycle: BillingCycle | null` and writes it. `CreditState` exposes `planBillingCycle`. `loadPlanFields` returns it. Function docstrings updated to explain the cycle-agnostic +30d anchor.
+- **Env vars:** Added `DODO_PLAN_STARTER_ANNUAL`, `DODO_PLAN_CREATOR_ANNUAL`, `DODO_PLAN_PRO_ANNUAL` to `src/env-extra.d.ts` and `.dev.vars.example`. User TODO on Dodo dashboard: create the 3 annual Subscription products with Yearly billing cycle at $50/$200/$700.
+- **UI:**
+  - NEW `src/app/(routes)/(dashboard)/dashboard/billing/_components/billing-plans-section.tsx` (client) — owns the Monthly/Annual toggle (Save 17% badge), renders plan cards with cycle-aware pricing via `getPlanPricing`.
+  - `billing/page.tsx` shrunk to a server component delegating the plan grid to `<BillingPlansSection>`. Current-plan summary card now displays `· monthly` / `· annual` next to plan name.
+  - `_components/buy-pack-button.tsx` `SubscribeButton` accepts `billingCycle` + `currentBillingCycle`; only marks itself "Current plan" when both planId AND cycle match.
+  - `_components/landing-client.tsx` `PricingSection` — toggle now reads `plan.monthlyPriceUsd` / `plan.annualPriceUsd / 12` (deleted the `* 0.8` hack); "Save 17%" computed from `getAnnualSavingsPercent`.
+  - `profile/page.tsx` — added Billing-cycle field to account details + cycle badge in the header card.
+
+### Track B — `channel` → `integration` rename
+- **RENAMED:** `src/lib/constants/social-platforms.tsx` → `src/lib/constants/integrations.tsx`. Inside: `ChannelTypeEnum`→`IntegrationTypeEnum`, `Channel` type→`Integration`, `CHANNELS`→`INTEGRATIONS`, `CHANNEL_TYPE_*` (5 maps)→`INTEGRATION_TYPE_*`, `getChannel*` (5 helpers)→`getIntegration*`.
+- **Updated callers:** `app-sidebar.tsx` (filter loop + counter denominator now uses `INTEGRATIONS.length`), `landing-client.tsx` (`channels:` data prop on `ANIMATION_STEPS` items renamed to `integrations:`, `CHANNELS.find` / `CHANNELS.filter` updated). Marketing copy "queue multi-channel on autopilot" at `landing-client.tsx:131` kept as English (industry term, not a code identifier).
+- `HugeiconsIcon` import dropped from `landing-client.tsx` (already unused; icons are native React SVG components).
+
+### Track C — Real integrations + ideas + scheduled_posts schema
+- **NEW `src/db/integrations-schema.ts`:**
+  - `integrations` table — `id` text PK, `userId` (FK cascade), `platform` (enum from `integrationPlatforms`), `handle`, `profileImage`, `profileUrl`, `accessToken`/`refreshToken`/`tokenExpiresAt` (plaintext for now — envelope-encrypt before any real OAuth), `scope`, `metadata` json, `status` (active|expired|revoked), `connectedAt`, `lastSyncAt`, `createdAt`/`updatedAt`. Indexes: `(userId)`, **UNIQUE `(userId, platform)`**.
+  - `integrationsRelations` — `one(users)`.
+- **NEW `src/db/content-schema.ts`:**
+  - `idea_groups` — `id`, `userId` (cascade), `name`, timestamps. Index `(userId)`.
+  - `ideas` — `id`, `userId` (cascade), `groupId` (set null on group delete), `title`, `description`, `images` json string[], `tags` json string[], `sortOrder`, timestamps. Indexes `(userId)`, `(userId, groupId)`.
+  - `scheduled_posts` — `id`, `userId` (cascade), `integrationId` (cascade — deleting an integration cancels its queued posts), `ideaId` (set null), `content`, `images` json, `scheduledAt`, `timezone`, `status` (draft|queued|publishing|published|failed|cancelled), `publishedAt`, `publishedUrl`, `failureReason`, `attemptCount`, timestamps. Indexes `(userId, scheduledAt)`, `(status, scheduledAt)` (for the future cron-driven publisher), `(integrationId)`.
+  - `*Relations` for each table.
+- **`src/db/index.ts`** — imports + spreads `integrationsSchema` and `contentSchema`, re-exports.
+- **Migration regenerated:** Deleted `drizzle/0000_init.sql` + `meta/0000_snapshot.json` + reset `_journal.json`. Ran `pnpm drizzle-kit generate --name init` → produced fresh `0000_init.sql` covering **10 tables**: users, sessions, accounts, verifications, credit_transactions, payment_events, integrations, idea_groups, ideas, scheduled_posts. Applied locally with 30 SQL commands.
+- **REWRITTEN `src/app/api/integrations/route.ts`:**
+  - `GET`: auth-gated. Merges static `INTEGRATIONS` taxonomy with DB rows. Supports `?filter=connected|unconnected`. Returns `{ integrations, counts: { connected, total } }`.
+  - `POST`: returns `501 not_implemented` (OAuth start/callback per platform out of scope).
+  - `DELETE`: `{ integrationId }` — removes the row scoped to session user; CASCADE drops dependent scheduled posts.
+- **REWRITTEN `src/app/(routes)/(dashboard)/dashboard/integrations/page.tsx`:** Server component. Queries `integrations` table for the session user, merges with static `INTEGRATIONS` list, renders rows. Removed all `localStorage` ("lemon_connected_integrations" key gone). Per-row Connect/Disconnect buttons extracted to a tiny client component.
+- **NEW `src/app/(routes)/(dashboard)/dashboard/integrations/_components/integration-row-actions.tsx`:** `<ConnectButton>` POSTs to `/api/integrations` (surfaces "OAuth flow coming soon" toast on the 501 response). `<DisconnectButton>` DELETEs and reloads; both dispatch `window.dispatchEvent(new Event("integrations:updated"))`.
+- **Updated `src/app/(routes)/(dashboard)/_common/app-sidebar.tsx`:** Dropped the `lemon_connected_integrations` localStorage read; replaced with `fetch("/api/integrations?filter=connected")`. Renamed listened event `lemon_integrations_updated` → `integrations:updated`. Counter footer "{n}/{INTEGRATIONS.length} integrations connected" (no more hard-coded 8).
+
+### Files added/renamed/rewritten/deleted
+- ADDED: `src/db/integrations-schema.ts`, `src/db/content-schema.ts`, `src/app/(routes)/(dashboard)/dashboard/billing/_components/billing-plans-section.tsx`, `src/app/(routes)/(dashboard)/dashboard/integrations/_components/integration-row-actions.tsx`, `src/lib/constants/integrations.tsx`.
+- DELETED: `src/lib/constants/social-platforms.tsx`.
+- REWRITTEN: `src/lib/billing/packs.ts`, `src/app/api/integrations/route.ts`, `src/app/(routes)/(dashboard)/dashboard/integrations/page.tsx`, `src/app/(routes)/(dashboard)/dashboard/billing/page.tsx`.
+- MODIFIED: `src/db/auth-schema.ts`, `src/db/index.ts`, `src/lib/billing/credits.ts`, `src/lib/billing/dodo.ts`*, `src/app/api/billing/checkout/route.ts`, `src/app/api/webhooks/dodo/route.ts`, `src/app/(routes)/(dashboard)/_common/app-sidebar.tsx`, `src/app/(routes)/(landing)/_components/landing-client.tsx`, `src/app/(routes)/(dashboard)/dashboard/profile/page.tsx`, `src/app/(routes)/(dashboard)/dashboard/billing/_components/buy-pack-button.tsx`, `src/env-extra.d.ts`, `.dev.vars.example`, `drizzle/0000_init.sql` (regenerated), `drizzle/meta/0000_snapshot.json` + `_journal.json`.
+
+*`dodo.ts` itself is unchanged this session — the cycle is a Dodo product attribute (set on the dashboard at product creation), not an API parameter. The change is at the env-var / metadata layer.
+
+### Verified this session
+- `pnpm exec tsc --noEmit` — clean
+- `pnpm exec next build` — clean; all 11 routes registered (`/api/integrations` shows up correctly)
+- `pnpm drizzle-kit generate --name init` — single migration, 10 tables, 16 indexes (incl. UNIQUE `(user_id, platform)`)
+- Local D1 wiped + migration applied — 30 SQL commands succeeded
+
+### NOT verified this session
+- No live browser run (sign in, observe `/dashboard/integrations` server-rendered with 0 connected; flip the billing toggle, watch the network payload; subscribe with annual)
+- No Dodo test purchase (annual products not yet created on the dashboard; `DODO_PLAN_*_ANNUAL` env vars empty)
+- Remote D1 migration NOT applied — run `npx wrangler d1 migrations apply aipostsc-auth-db --remote` before shipping
+- OAuth flows per platform NOT implemented; Connect button always surfaces "Coming soon" toast
+- `applySubscriptionRenewed` for an annual subscriber — relies on `resetMonthlyCreditsIfDue` to handle the 11 intermediate monthly refreshes; not yet stress-tested
+
+### User TODO on Dodo dashboard
+1. Create 3 new Subscription products (Yearly billing cycle): Starter Annual $50, Creator Annual $200, Pro Annual $700. Attach the same "AI Credits" entitlement as the monthly variants.
+2. Copy the 3 new product IDs into `.dev.vars` as `DODO_PLAN_STARTER_ANNUAL` / `_CREATOR_ANNUAL` / `_PRO_ANNUAL`.
+3. Run `pnpm cf-typegen` to refresh `cloudflare-env.d.ts`.

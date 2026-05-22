@@ -11,8 +11,6 @@ BETTER_AUTH_SECRET=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
-
-
 # Dodo Payments — https://app.dodopayments.com
 # DODO_MODE: "test" for sandbox, "live" for production
 DODO_MODE=test
@@ -25,6 +23,14 @@ DODO_WEBHOOK_SECRET=
 DODO_PLAN_STARTER=
 DODO_PLAN_CREATOR=
 DODO_PLAN_PRO=
+
+# Subscription plan products (recurring ANNUAL — "2 months free" pricing:
+# $50 / $200 / $700 per year). Create as a separate Dodo product per plan with
+# Yearly billing cycle. Same "AI Credits" entitlement attachment as monthly
+# (the per-period credit grant stays the same regardless of cycle).
+DODO_PLAN_STARTER_ANNUAL=
+DODO_PLAN_CREATOR_ANNUAL=
+DODO_PLAN_PRO_ANNUAL=
 
 # One-time top-up SKU(s). Credits added by these never expire (tracked in our
 # topup pool). Create on Dodo as ONE-TIME products. Don't attach the 30-day
