@@ -5,6 +5,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare"
 
 import { getDb, schema } from "@/db"
 import { initializeFreeTierUser } from "@/lib/billing/credits"
+import { APP_NAME } from "@/lib/constants/app"
 
 function kvSecondaryStorage(kv: KVNamespace) {
   return {
@@ -26,7 +27,7 @@ function buildAuth(env: CloudflareEnv) {
   const isProd = env.NEXTJS_ENV !== "development"
 
   return betterAuth({
-    appName: "Broad Sky",
+    appName: APP_NAME,
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
     trustedOrigins: [env.BETTER_AUTH_URL],

@@ -393,3 +393,26 @@ Idempotency: every event hits the `payment_events` insert-or-noop guard BEFORE d
 - No Dodo test subscription or top-up purchase (webhook secret not configured yet)
 - Concurrency claim (optimistic lock retries) not stress-tested with a parallel-spend script
 - The exact JSON shape of Dodo's `subscription.active`/`subscription.cancelled`/`subscription.past_due` payloads (especially `current_period_end` vs `next_billing_date`) — verify against https://docs.dodopayments.com when first events arrive; the `getSubscriptionPeriodEnd` helper tolerates either key
+
+---
+
+## 14. Session log — 2026-05-22 (session 4 — Settings & Integrations Split)
+
+User requested a cleaner separation between Settings and Integrations, reverting the multi-tab Settings page and replacing inaccurate social logos with true brand SVGs.
+
+### Decisions taken
+- **Settings Page:** Reverted to a straightforward, single-page view showing Account, Connected providers, Billing, and Support.
+- **Integrations Page:** Created a dedicated `/dashboard/integrations` page to handle social channel connections. It uses a placeholder API route and syncs via client-side `localStorage`.
+- **Social Logos:** Replaced `@hugeicons/react` imports in `src/lib/constants/social-platforms.ts` with explicit brand SVG components (X, LinkedIn, Instagram, Threads, Facebook, Bluesky, YouTube, TikTok) for authenticity.
+
+### Files modified/created
+- **`src/app/(routes)/(dashboard)/dashboard/settings/page.tsx`:** Restored to a simple, non-tabbed layout.
+- **`src/app/(routes)/(dashboard)/dashboard/settings/_components/settings-tabs.tsx`:** Deleted.
+- **`src/app/(routes)/(dashboard)/dashboard/integrations/page.tsx`:** New page dedicated to displaying and managing social integrations.
+- **`src/app/api/integrations/route.ts`:** New empty placeholder API route for integrations.
+- **`src/lib/constants/social-platforms.ts`:** Replaced Hugeicons with pure SVG components. Updated `Channel` type to expect a `React.ComponentType`.
+- **`src/app/(routes)/(dashboard)/_common/dashboard-nav.ts`:** Added the Integrations link using the `Blocks` icon.
+- **`src/app/(routes)/(landing)/_components/landing-client.tsx`:** Updated `HugeiconsIcon` references to natively render the new SVG components.
+
+### Verified
+- `npm run build` clean, new routes registered.

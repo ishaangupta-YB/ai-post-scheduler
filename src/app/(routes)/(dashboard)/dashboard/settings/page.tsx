@@ -1,16 +1,16 @@
 import { headers } from "next/headers"
-import Link from "next/link"
 import { redirect } from "next/navigation"
 import { and, eq } from "drizzle-orm"
+import Link from "next/link"
 import { ArrowRight, Check, Mail, Sparkles } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { accounts, getDb } from "@/db"
 import { getAuth } from "@/lib/auth"
-
 import { DashboardPageHeader } from "../../_common/dashboard-page-header"
 import { mainNav } from "../../_common/dashboard-nav"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { CONTACT_EMAIL } from "@/lib/constants/app"
 
 export const dynamic = "force-dynamic"
 
@@ -32,94 +32,91 @@ export default async function SettingsPage() {
     )
     .get()
 
+  const googleAccountConnected = !!googleAccount
+
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <DashboardPageHeader title={page.name} description={page.description} />
+      
+      <div className="flex flex-col gap-6">
+        <SettingSection
+          title="Account"
+          description="The identity you sign in with."
+        >
+          <Row label="Name" value={session.user.name} />
+          <Row label="Email" value={session.user.email} />
+          <Row label="Workspace ID" value={session.user.id} mono />
+        </SettingSection>
 
-      <SettingSection
-        title="Account"
-        description="The identity you sign in with."
-      >
-        <Row
-          label="Name"
-          value={session.user.name}
-        />
-        <Row label="Email" value={session.user.email} />
-        <Row
-          label="Workspace ID"
-          value={session.user.id}
-          mono
-        />
-      </SettingSection>
-
-      <SettingSection
-        title="Connected providers"
-        description="Sign-in methods linked to this account."
-      >
-        <div className="flex items-center justify-between gap-4 px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-md border border-border bg-background">
-              <GoogleMark />
+        <SettingSection
+          title="Connected providers"
+          description="Sign-in methods linked to this account."
+        >
+          <div className="flex items-center justify-between gap-4 px-5 py-4 bg-card">
+            <div className="flex items-center gap-3">
+              <div className="grid size-9 place-items-center rounded-md border border-border bg-background">
+                <GoogleMark />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-medium">Google</span>
+                <span className="text-xs text-muted-foreground">
+                  {session.user.email}
+                </span>
+              </div>
             </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium">Google</span>
-              <span className="text-xs text-muted-foreground">
-                {session.user.email}
+            {googleAccountConnected ? (
+              <Badge variant="secondary" className="gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <Check className="size-3" />
+                Connected
+              </Badge>
+            ) : (
+              <Badge variant="outline">Not linked</Badge>
+            )}
+          </div>
+        </SettingSection>
+
+        <SettingSection
+          title="Billing"
+          description="Manage credits and payment history."
+        >
+          <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between bg-card">
+            <div className="flex items-center gap-3">
+              <Sparkles className="size-4 text-primary" />
+              <span className="text-sm text-muted-foreground">
+                Top up credits or change your plan.
               </span>
             </div>
+            <Button
+              size="sm"
+              variant="outline"
+              render={<Link href="/dashboard/billing" />}
+            >
+              Open billing <ArrowRight className="size-3.5" />
+            </Button>
           </div>
-          {googleAccount ? (
-            <Badge variant="secondary" className="gap-1">
-              <Check className="size-3" />
-              Connected
-            </Badge>
-          ) : (
-            <Badge variant="outline">Not linked</Badge>
-          )}
-        </div>
-      </SettingSection>
+        </SettingSection>
 
-      <SettingSection
-        title="Billing"
-        description="Manage credits and payment history."
-      >
-        <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <Sparkles className="size-4 text-primary" />
-            <span className="text-sm text-muted-foreground">
-              Top up credits or change your plan.
-            </span>
+        <SettingSection
+          title="Support"
+          description="Need help with your workspace?"
+        >
+          <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between bg-card">
+            <div className="flex items-center gap-3">
+              <Mail className="size-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                We usually reply within a business day.
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              render={<a href={`mailto:${CONTACT_EMAIL}`} />}
+            >
+              {CONTACT_EMAIL}
+            </Button>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            render={<Link href="/dashboard/billing" />}
-          >
-            Open billing <ArrowRight className="size-3.5" />
-          </Button>
-        </div>
-      </SettingSection>
-
-      <SettingSection
-        title="Support"
-        description="Need help with your workspace?"
-      >
-        <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <Mail className="size-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">
-              We usually reply within a business day.
-            </span>
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            render={<a href="mailto:support@broadsky.app" />}
-          >
-            support@broadsky.app
-          </Button>
-        </div>
-      </SettingSection>
+        </SettingSection>
+      </div>
     </div>
   )
 }
@@ -135,9 +132,9 @@ function SettingSection({
 }) {
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card">
-      <header className="border-b border-border px-5 py-4">
+      <header className="border-b border-border px-5 py-4 bg-muted/20">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
       </header>
       <div className="divide-y divide-border">{children}</div>
     </section>
@@ -154,10 +151,10 @@ function Row({
   mono?: boolean
 }) {
   return (
-    <div className="grid grid-cols-3 items-center gap-4 px-5 py-3 text-sm">
-      <dt className="text-muted-foreground">{label}</dt>
+    <div className="grid grid-cols-3 items-center gap-4 px-5 py-3.5 text-sm bg-card">
+      <dt className="text-muted-foreground font-medium">{label}</dt>
       <dd
-        className={`col-span-2 break-all ${mono ? "font-mono text-xs" : ""}`}
+        className={`col-span-2 break-all text-foreground ${mono ? "font-mono text-xs bg-muted/30 px-1.5 py-0.5 rounded border border-border/40 w-fit" : ""}`}
       >
         {value}
       </dd>
@@ -167,7 +164,7 @@ function Row({
 
 function GoogleMark() {
   return (
-    <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="size-4.5" aria-hidden="true">
       <path
         fill="#4285F4"
         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.75h3.57c2.08-1.92 3.28-4.74 3.28-8.07z"

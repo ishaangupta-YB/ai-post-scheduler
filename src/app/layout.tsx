@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Theming",
-  description: "CSS variables and semantic theme tokens with dark mode",
+  title: "CalmPost - Social Post Scheduler",
+  description: "A calm, AI-powered social post scheduling app for Twitter, X, and LinkedIn Threads.",
 }
 
 export default function RootLayout({

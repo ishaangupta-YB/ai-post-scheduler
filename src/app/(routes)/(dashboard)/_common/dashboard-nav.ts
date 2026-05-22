@@ -2,6 +2,7 @@ import {
   Calendar,
   CreditCard,
   Lightbulb,
+  Blocks,
   Settings,
   type LucideIcon,
 } from "lucide-react"
@@ -23,16 +24,16 @@ export const mainNav: DashboardNavItem[] = [
     description: "Capture and refine post ideas before you schedule them.",
   },
   {
+    name: "Integrations",
+    href: `${DASHBOARD_BASE_PATH}/integrations`,
+    icon: Blocks,
+    description: "Connect your social media accounts.",
+  },
+  {
     name: "Schedule",
     href: `${DASHBOARD_BASE_PATH}/schedule`,
     icon: Calendar,
     description: "Plan and manage your upcoming social posts.",
-  },
-  {
-    name: "Billing",
-    href: `${DASHBOARD_BASE_PATH}/billing`,
-    icon: CreditCard,
-    description: "View your plan, invoices, and payment methods.",
   },
   {
     name: "Settings",

@@ -12,45 +12,19 @@ import {
   Check,
   MessageSquare,
   Send,
-  Zap
+  Zap,
+  Leaf,
+  Sun,
+  Moon
 } from "lucide-react"
 
-// Custom SVG Brand Icons since they are not present in this lucide-react version
-function Twitter(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z" />
-    </svg>
-  )
-}
-
-function Linkedin(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
-      <rect x="2" y="9" width="4" height="12" />
-      <circle cx="4" cy="4" r="2" />
-    </svg>
-  )
-}
 import { toast } from "sonner"
 import { authClient } from "@/lib/auth-client"
+import { useTheme } from "next-themes"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { CHANNELS, ChannelTypeEnum } from "@/lib/constants/social-platforms"
+import { APP_NAME } from "@/lib/constants/app"
+import { PLANS } from "@/lib/billing/packs"
 
 // ───────── Google Sign In Helper ─────────
 async function triggerGoogleSignIn() {
@@ -64,9 +38,17 @@ async function triggerGoogleSignIn() {
   }
 }
 
+
+
 // ───────── N5 Floating Nav Pill ─────────
 export function LandingHeader() {
   const [isPending, setIsPending] = useState(false)
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   async function handleLogin() {
     setIsPending(true)
@@ -76,36 +58,37 @@ export function LandingHeader() {
 
   return (
     <nav className="nav-pill" aria-label="Primary">
-      <a href="#" className="nav-pill__brand" aria-label="CalmPost home">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          className="text-primary"
-          aria-hidden="true"
-        >
-          <path d="M21 5H3v14h18V5z" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M3 10h18M9 5v14" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="15" cy="14" r="2" fill="currentColor" />
-        </svg>
-        <span>CalmPost</span>
+      <a href="#" className="nav-pill__brand" aria-label={`${APP_NAME} home`}>
+        <div className="flex aspect-square size-6 items-center justify-center rounded-md bg-warning text-warning-foreground shadow-xs">
+          <Leaf className="size-3.5 fill-current" />
+        </div>
+        <span>{APP_NAME}</span>
       </a>
       <div className="nav-pill__links">
         <a className="nav-pill__link" href="#product">Product</a>
         <a className="nav-pill__link" href="#features">Features</a>
         <a className="nav-pill__link" href="#pricing">Pricing</a>
       </div>
-      <button
-        onClick={handleLogin}
-        disabled={isPending}
-        className="nav-pill__cta"
-        type="button"
-      >
-        {isPending ? "Redirecting…" : "Start Free →"}
-      </button>
+      <div className="flex items-center gap-2">
+        {mounted && (
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="size-8 rounded-full flex items-center justify-center text-foreground hover:bg-muted transition-colors cursor-pointer border border-border/40"
+            type="button"
+            aria-label="Toggle theme"
+          >
+            {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </button>
+        )}
+        <button
+          onClick={handleLogin}
+          disabled={isPending}
+          className="nav-pill__cta"
+          type="button"
+        >
+          {isPending ? "Redirecting…" : "Start Free →"}
+        </button>
+      </div>
     </nav>
   )
 }
@@ -141,17 +124,17 @@ const ANIMATION_STEPS = [
   {
     prompt: "Write a thread about why databases need connection pooling...",
     draft: "1/ Why do databases choke under sudden traffic spikes? Usually, it's not the queries—it's connection overhead. \n\nEvery time a client connects, the DB forks a process. This consumes memory and CPU before the query even starts.",
-    channels: ["twitter"]
+    channels: [ChannelTypeEnum.TWITTER]
   },
   {
     prompt: "Draft a LinkedIn announcement for CalmPost launch...",
     draft: "Staring at a blank screen on Sunday night is the worst way to do social media. \n\nToday, we're launching CalmPost. Capture ideas in a click, let AI draft in your exact tone, and queue multi-channel on autopilot.",
-    channels: ["linkedin"]
+    channels: [ChannelTypeEnum.LINKEDIN]
   },
   {
     prompt: "Create a short tweet about Tailwind CSS v4 speed...",
     draft: "Tailwind v4 is an absolute rocket. Rust-powered engine compiling 10x faster, zero-config setup, native cascade layers. \n\nOur bundle sizes dropped by 18% with zero code changes. Huge win.",
-    channels: ["twitter", "linkedin"]
+    channels: [ChannelTypeEnum.TWITTER, ChannelTypeEnum.LINKEDIN]
   }
 ]
 
@@ -259,16 +242,20 @@ export function LivePostDraftCard() {
           )}
         </div>
 
-        <div className="live-post-card__channels">
-          <span className="text-muted-foreground/60 mr-1">channels:</span>
-          <span className={`live-post-card__channel flex items-center gap-1 ${currentStep.channels.includes("twitter") ? "active" : ""}`}>
-            <Twitter className="size-3" />
-            Twitter
-          </span>
-          <span className={`live-post-card__channel flex items-center gap-1 ${currentStep.channels.includes("linkedin") ? "active" : ""}`}>
-            <Linkedin className="size-3" />
-            LinkedIn
-          </span>
+        <div className="live-post-card__integrations">
+          <span className="text-muted-foreground/60 mr-1">integrations:</span>
+          {CHANNELS.filter(c => c.type === ChannelTypeEnum.TWITTER || c.type === ChannelTypeEnum.LINKEDIN).map((integration) => {
+            const isActive = currentStep.channels.includes(integration.type)
+            return (
+              <span
+                key={integration.type}
+                className={`live-post-card__integration flex items-center gap-1 ${isActive ? "active" : ""}`}
+              >
+                <integration.icon className="size-3" />
+                {integration.label}
+              </span>
+            )
+          })}
         </div>
       </div>
     </aside>
@@ -279,6 +266,8 @@ export function LivePostDraftCard() {
 export function WorkbenchConsole() {
   const [activeTab, setActiveTab] = useState<"queue" | "ideas" | "analytics">("queue")
   const [stats, setStats] = useState({ queue: 14, reach: 98.4 })
+  const twitter = CHANNELS.find(c => c.type === ChannelTypeEnum.TWITTER)
+  const linkedin = CHANNELS.find(c => c.type === ChannelTypeEnum.LINKEDIN)
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -299,21 +288,10 @@ export function WorkbenchConsole() {
       {/* Sidebar Rail */}
       <div className="lp-bench__rail">
         <div className="lp-bench__brand text-foreground">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            className="text-primary"
-            aria-hidden="true"
-          >
-            <path d="M21 5H3v14h18V5z" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M3 10h18M9 5v14" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="15" cy="14" r="2" fill="currentColor" />
-          </svg>
-          <span>CalmPost</span>
+          <div className="flex aspect-square size-6 items-center justify-center rounded-md bg-warning text-warning-foreground shadow-xs">
+            <Leaf className="size-3.5 fill-current" />
+          </div>
+          <span>{APP_NAME}</span>
         </div>
         <div className="lp-bench__nav">
           <button
@@ -362,7 +340,7 @@ export function WorkbenchConsole() {
             </div>
           </div>
           <div className="lp-bench__stat">
-            <div className="label">Active Channels</div>
+            <div className="label">Active Integrations</div>
             <div className="value">
               <span>2/4 connected</span>
             </div>
@@ -378,7 +356,7 @@ export function WorkbenchConsole() {
               <div className="flex items-center justify-between rounded-md border border-border/50 bg-background/50 p-3 text-xs">
                 <div className="flex items-center gap-3">
                   <div className="rounded-full bg-primary/10 p-1.5 text-primary">
-                    <Twitter className="size-3.5" />
+                    {twitter && <twitter.icon className="size-3.5" />}
                   </div>
                   <div>
                     <p className="font-semibold text-foreground">Why we built an offline-first social scheduler...</p>
@@ -391,7 +369,7 @@ export function WorkbenchConsole() {
               <div className="flex items-center justify-between rounded-md border border-border/50 bg-background/50 p-3 text-xs">
                 <div className="flex items-center gap-3">
                   <div className="rounded-full bg-primary/10 p-1.5 text-primary">
-                    <Linkedin className="size-3.5" />
+                    {linkedin && <linkedin.icon className="size-3.5" />}
                   </div>
                   <div>
                     <p className="font-semibold text-foreground">We just hit 1,000 beta signups. Lessons learned:</p>
@@ -404,7 +382,7 @@ export function WorkbenchConsole() {
               <div className="flex items-center justify-between rounded-md border border-border/50 bg-background/50 p-3 text-xs opacity-75">
                 <div className="flex items-center gap-3">
                   <div className="rounded-full bg-primary/10 p-1.5 text-primary">
-                    <Twitter className="size-3.5" />
+                    {twitter && <twitter.icon className="size-3.5" />}
                   </div>
                   <div>
                     <p className="font-semibold text-foreground">5 micro-animations that make websites feel premium...</p>
@@ -513,78 +491,35 @@ export function PricingSection() {
         </div>
 
         <div className="lp-pricing__grid">
-          {/* Starter Plan */}
-          <article className="lp-tier">
-            <div className="lp-tier__name">Starter</div>
-            <div className="lp-tier__price">
-              <span>$0</span>
-            </div>
-            <p className="lp-tier__desc">Up to 10 scheduled posts/month. For side projects and personal content.</p>
-            <ul className="lp-tier__features">
-              <li>1 social profile connected</li>
-              <li>Basic AI post drafting</li>
-              <li>Auto-posting queue</li>
-              <li>Community support</li>
-            </ul>
-            <button
-              onClick={handleAction}
-              disabled={isPending}
-              className="lp-btn lp-btn--ghost mt-auto"
-              type="button"
-            >
-              Start Free
-            </button>
-          </article>
+          {PLANS.map((plan) => {
+            const price = isAnnual ? Math.round(plan.priceUsd * 0.8) : plan.priceUsd
+            const isFeatured = plan.popular
 
-          {/* Pro Plan (Featured) */}
-          <article className="lp-tier lp-tier--featured">
-            <span className="lp-tier__badge">Most creators choose this</span>
-            <div className="lp-tier__name">Pro Creator</div>
-            <div className="lp-tier__price">
-              <span>{isAnnual ? "$19" : "$24"}</span>
-              <small>/ mo</small>
-            </div>
-            <p className="lp-tier__desc">For creators building an audience and scheduling content regularly.</p>
-            <ul className="lp-tier__features">
-              <li>Unlimited scheduled posts</li>
-              <li>5 social profiles connected</li>
-              <li>Advanced AI persona styles</li>
-              <li>Optimal post-time analytics</li>
-              <li>Priority support</li>
-            </ul>
-            <button
-              onClick={handleAction}
-              disabled={isPending}
-              className="lp-btn lp-btn--primary mt-auto"
-              type="button"
-            >
-              Start 14-Day Free Trial
-            </button>
-          </article>
-
-          {/* Enterprise Plan */}
-          <article className="lp-tier">
-            <div className="lp-tier__name">Agency</div>
-            <div className="lp-tier__price">
-              <span>Custom</span>
-            </div>
-            <p className="lp-tier__desc">For content marketing teams, agencies, and structured brand groups.</p>
-            <ul className="lp-tier__features">
-              <li>Unlimited profiles & workspaces</li>
-              <li>Custom fine-tuned AI style models</li>
-              <li>Multi-member approval flows</li>
-              <li>SOC 2 and HIPAA security options</li>
-              <li>Dedicated Account Manager</li>
-            </ul>
-            <button
-              onClick={handleAction}
-              disabled={isPending}
-              className="lp-btn lp-btn--ghost mt-auto"
-              type="button"
-            >
-              Talk to Sales
-            </button>
-          </article>
+            return (
+              <article key={plan.id} className={`lp-tier ${isFeatured ? "lp-tier--featured" : ""}`}>
+                {isFeatured && <span className="lp-tier__badge">Most creators choose this</span>}
+                <div className="lp-tier__name">{plan.label}</div>
+                <div className="lp-tier__price">
+                  <span>${price}</span>
+                  <small>/ mo</small>
+                </div>
+                <p className="lp-tier__desc">{plan.description}</p>
+                <ul className="lp-tier__features">
+                  {plan.features.map((feature, idx) => (
+                    <li key={idx}>{feature}</li>
+                  ))}
+                </ul>
+                <button
+                  onClick={handleAction}
+                  disabled={isPending}
+                  className={`lp-btn ${isFeatured ? "lp-btn--primary" : "lp-btn--ghost"} mt-auto`}
+                  type="button"
+                >
+                  {plan.id === "starter" ? "Start Free" : isFeatured ? "Start 14-Day Free Trial" : "Get Started"}
+                </button>
+              </article>
+            )
+          })}
         </div>
       </div>
     </section>

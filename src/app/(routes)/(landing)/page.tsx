@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { Sparkles } from "lucide-react"
 
 import { getAuth } from "@/lib/auth"
+import { APP_NAME, CONTACT_EMAIL } from "@/lib/constants/app"
 
 import { GoogleCta } from "./_components/google-cta"
 import {
@@ -40,7 +41,7 @@ export default async function LandingPage() {
                 Plan a quarter of social content in <span className="lp-italic-accent">an afternoon.</span>
               </h1>
               <p className="lp-hero__sub text-balance">
-                Capture thoughts in seconds, let AI draft them in your personalized voice, and schedule across your channels — all from one calm workspace.
+                Capture thoughts in seconds, let AI draft them in your personalized voice, and schedule across your integrations — all from one calm workspace.
               </p>
               <div className="lp-hero__ctas">
                 <GoogleCta />
@@ -64,12 +65,12 @@ export default async function LandingPage() {
             <div className="lp-hero__marquee__track">
               <span>CAPTURE IDEAS</span>
               <span>DRAFT WITH AI</span>
-              <span>SCHEDULE MULTI-CHANNEL</span>
+              <span>SCHEDULE MULTI-INTEGRATION</span>
               <span>OPTIMIZE SEND TIMES</span>
               <span>SYNC TO CALENDAR</span>
               <span>CAPTURE IDEAS</span>
               <span>DRAFT WITH AI</span>
-              <span>SCHEDULE MULTI-CHANNEL</span>
+              <span>SCHEDULE MULTI-INTEGRATION</span>
               <span>OPTIMIZE SEND TIMES</span>
               <span>SYNC TO CALENDAR</span>
             </div>
@@ -103,7 +104,7 @@ export default async function LandingPage() {
               </h2>
             </div>
             <p className="lp-section-head__desc">
-              Drop in a quick text idea, voice note, or link. CalmPost drafts channel-ready posts in your voice, updates your queue, and visualizes your engagement analytics instantly.
+              Drop in a quick text idea, voice note, or link. {APP_NAME} drafts integration-ready posts in your voice, updates your queue, and visualizes your engagement analytics instantly.
             </p>
           </div>
 
@@ -122,7 +123,7 @@ export default async function LandingPage() {
               </h2>
             </div>
             <p className="lp-section-head__desc">
-              From staring at a blinking cursor to a fully-scheduled calendar. CalmPost takes the stress out of social presence.
+              From staring at a blinking cursor to a fully-scheduled calendar. {APP_NAME} takes the stress out of social presence.
             </p>
           </div>
 
@@ -166,7 +167,7 @@ export default async function LandingPage() {
               <div className="lp-feature__art art-capture" aria-hidden="true"></div>
               <h3 className="lp-feature__title">Capture thoughts instantly</h3>
               <p className="lp-feature__desc">
-                Save links, screenshots, or write loose thoughts on the go. CalmPost holds them in your idea inbox until you're ready to draft.
+                Save links, screenshots, or write loose thoughts on the go. {APP_NAME} holds them in your idea inbox until you're ready to draft.
               </p>
               <a className="lp-feature__link" href="#product">Explore drafts inbox</a>
             </TiltCard>
@@ -175,7 +176,7 @@ export default async function LandingPage() {
               <div className="lp-feature__art art-voice-sliders" aria-hidden="true"></div>
               <h3 className="lp-feature__title">Trained on your persona</h3>
               <p className="lp-feature__desc">
-                Fine-tune your writing persona with sample posts. CalmPost mimics your spacing, style, and tone to generate perfect drafts.
+                Fine-tune your writing persona with sample posts. {APP_NAME} mimics your spacing, style, and tone to generate perfect drafts.
               </p>
               <a className="lp-feature__link" href="#product">Configure personas</a>
             </TiltCard>
@@ -186,7 +187,7 @@ export default async function LandingPage() {
                 <div className="lp-sheet"><b>INV-04211</b>LinkedIn · 10 AM<br/><em>Scheduled</em></div>
                 <div className="lp-sheet"><b>INV-04212</b>Twitter · 6 PM<br/><em>Simulated</em></div>
               </div>
-              <h3 className="lp-feature__title">Multi-channel calendar</h3>
+              <h3 className="lp-feature__title">Multi-integration calendar</h3>
               <p className="lp-feature__desc">
                 Cross-post to LinkedIn and Twitter at the same time. Custom queues schedule posts at optimal times for each platform.
               </p>
@@ -233,7 +234,7 @@ export default async function LandingPage() {
       <footer className="lp-footer">
         <div className="lp-container">
           <p className="lp-footer__statement text-balance">
-            CalmPost is a scheduling assistant for teams who'd rather <span className="lp-italic-accent">build</span> than post.
+            {APP_NAME} is a scheduling assistant for teams who'd rather <span className="lp-italic-accent">build</span> than post.
           </p>
           
           <div className="lp-footer__row">
@@ -273,11 +274,21 @@ export default async function LandingPage() {
                 <li><a href="#">Security</a></li>
               </ul>
             </div>
+            <div className="lp-footer__col">
+              <h5>Support</h5>
+              <ul>
+                <li>
+                  <a href={`mailto:${CONTACT_EMAIL}`} className="text-muted-foreground hover:text-foreground transition-colors break-all">
+                    {CONTACT_EMAIL}
+                  </a>
+                </li>
+              </ul>
+            </div>
           </div>
 
           <div className="lp-footer__legal">
-            <span className="wordmark">CalmPost</span>
-            <span>© 2026 CalmPost Labs · Made in Brooklyn &amp; SF · v1.0.0</span>
+            <span className="wordmark">{APP_NAME}</span>
+            <span>© 2026 {APP_NAME} Labs · Made in Brooklyn &amp; SF · v1.0.0</span>
           </div>
         </div>
       </footer>

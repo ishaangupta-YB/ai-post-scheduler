@@ -4,7 +4,6 @@ import { useState } from "react"
 import { ArrowRight } from "lucide-react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
 import { authClient } from "@/lib/auth-client"
 
 export function GoogleCta() {
@@ -24,9 +23,14 @@ export function GoogleCta() {
   }
 
   return (
-    <Button size="lg" onClick={handleClick} disabled={isPending}>
-      {isPending ? "Redirecting…" : "Sign in with Google"}
+    <button
+      onClick={handleClick}
+      disabled={isPending}
+      className="lp-btn lp-btn--primary cursor-pointer"
+      type="button"
+    >
+      {isPending ? "Redirecting…" : "Start Free with Google"}
       <ArrowRight className="size-4" />
-    </Button>
+    </button>
   )
 }
