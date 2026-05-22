@@ -1,6 +1,6 @@
 # Broad Sky — Codebase Checkpoint
 
-> **Last updated:** 2026-05-22
+> **Last updated:** 2026-05-22 (session 3 — two-pool credit refactor)
 > **Purpose:** Hand-off doc for future agents. Snapshot of what's built, what's stubbed, what's not done, and what still needs verification.
 
 ---
@@ -10,8 +10,12 @@
 - **Product:** Broad Sky — AI-powered social media post scheduler SaaS.
 - **Stack:** Next.js 16.2.6 (App Router, Turbopack) → OpenNext Cloudflare → Cloudflare Workers. D1 SQLite. KV for auth secondary storage. Tailwind 4 + shadcn UI + Base UI primitives.
 - **Auth:** Better Auth 1.6.11 direct (NOT `better-auth-cloudflare`), Google OAuth only.
-- **Billing model:** **Pure credits, pay-as-you-go via Dodo Payments.** No subscriptions. AI operations debit credits; users buy credit packs.
-- **Branch:** `main` (only branch). Two commits exist: initial CF scaffold + auth setup.
+- **Billing model (session 3 rewrite):** **Two-pool credits via Dodo Payments.**
+  - `monthly_credit_balance` — hard-resets every 30 days to the plan's allotment (Starter 100 / Creator 500 / Pro 2000 / Free 25). No rollover.
+  - `topup_credit_balance` — one-time top-ups that never expire.
+  - Spend monthly first, then topup. Hard cutoff at zero (no overage).
+  - 3 Dodo products = subscription plans; 1 Dodo product = one-time top-up SKU.
+- **Branch:** `main` (only branch).
 
 ---
 
@@ -60,9 +64,22 @@
 
 ### Dashboard shell
 - `src/app/(routes)/(dashboard)/layout.tsx` — auth check, SidebarProvider + AppSidebar + SidebarInset
-- `src/app/(routes)/(dashboard)/_common/app-sidebar.tsx` — full sidebar nav with user menu, sign-out, "Create post" dialog (stub)
+- `src/app/(routes)/(dashboard)/_common/app-sidebar.tsx` — full sidebar nav with user **dropup** menu (Profile / Settings / Appearance submenu (Light/Dark/System) / Logout), sign-out, "Create post" dialog (stub)
 - `dashboard-page-header.tsx` — reusable title+description header
 - `dashboard-nav.ts` — `mainNav` config (Ideas, Schedule, Billing, Settings), `isNavActive`, `defaultDashboardPath`
+
+### Dashboard pages (session 2 additions)
+- `/dashboard/profile` — beautiful profile card: gradient banner, avatar, name/email/verified badge, member-since, credit-balance card, status card, account-details list. Reads from `users` table + `getCreditBalance`.
+- `/dashboard/settings` — Account section (name/email/workspace id), Connected providers (Google with Connected badge), Billing shortcut, Support mailto. Reads `accounts` row to confirm Google linkage.
+- `/dashboard/billing` — redesigned: current-balance card with gradient + Coins icon, 3 pricing cards (Starter/Creator/Pro) with per-pack accent gradient + feature checklist + Popular badge on Creator, "Buy" CTAs that hit `/api/billing/checkout`.
+
+### Social platforms module (session 2)
+- `src/lib/constants/social-platforms.ts` — `ChannelTypeEnum` (TWITTER/INSTAGRAM/THREADS/FACEBOOK/LINKEDIN/BLUESKY/YOUTUBE/TIKTOK) + per-channel maps:
+  - `CHANNEL_TYPE_ICONS` — IconSvgElement data from `@hugeicons/core-free-icons` (NewTwitter, Linkedin, Instagram, Threads, Facebook, Bluesky, Youtube, Tiktok)
+  - `CHANNEL_TYPE_URLS`, `CHANNEL_TYPE_LABELS`, `CHANNEL_TYPE_COLORS`, `CHANNEL_TYPE_CHAR_LIMITS`
+  - `CHANNELS` — ordered `Channel[]` for iteration
+  - Helpers: `getChannelUrl`, `getChannelIcon`, `getChannelLabel`, `getChannelColor`, `getChannelCharLimit`
+- Render icons via `<HugeiconsIcon icon={...} />` from `@hugeicons/react` — the icons are data objects, not React components.
 
 ### UI library
 - Full shadcn install: **55 components** in `src/components/ui/` (button, card, sidebar, dropdown-menu, dialog, table, tabs, command, etc.)
@@ -74,9 +91,9 @@
 
 - `/dashboard/ideas` — "Your post ideas will appear here." empty state, no functionality
 - `/dashboard/schedule` — "Your content calendar will appear here." empty state
-- `/dashboard/settings` — "Workspace and account settings will appear here." empty state
 - AppSidebar "Create post" dialog — opens but does nothing
 - `/dashboard` root — redirects to `/dashboard/ideas`
+- `social-platforms.ts` constants defined but no UI yet consumes them (channel pickers, post-target chips, etc. are still TODO)
 
 ---
 
@@ -91,7 +108,7 @@
 - **Analytics / insights** — no event tracking, no usage dashboards.
 - **Email** — no transactional email (welcome, receipts, etc.). No provider configured.
 - **Onboarding flow** — none.
-- **Settings page** — empty.
+- **Channel/account-linking UI** — `social-platforms.ts` is defined but no flows exist yet to actually link a user's X/LinkedIn/etc. account.
 
 ---
 
@@ -109,14 +126,15 @@ src/
 │   │   ├── (auth)/sign-in/page.tsx       # /sign-in
 │   │   └── (dashboard)/
 │   │       ├── layout.tsx                # auth gate + sidebar
-│   │       ├── _common/                  # sidebar, header, nav config
+│   │       ├── _common/                  # sidebar (dropup user menu), header, nav config
 │   │       └── dashboard/
 │   │           ├── page.tsx              # redirect → /dashboard/ideas
 │   │           ├── ideas/page.tsx        # STUB
 │   │           ├── schedule/page.tsx     # STUB
-│   │           ├── billing/page.tsx      # IMPLEMENTED
+│   │           ├── billing/page.tsx      # IMPLEMENTED — pricing cards
 │   │           │   └── _components/buy-pack-button.tsx
-│   │           └── settings/page.tsx     # STUB
+│   │           ├── settings/page.tsx     # IMPLEMENTED — account + providers
+│   │           └── profile/page.tsx      # IMPLEMENTED — user profile
 │   ├── layout.tsx, globals.css
 │
 ├── db/
@@ -128,10 +146,12 @@ src/
 │   ├── auth.ts                           # buildAuth() + getAuth() cached singleton
 │   ├── auth-client.ts                    # authClient, signIn/signOut/useSession exports
 │   ├── utils.ts                          # cn(), tsToDateStr()
-│   └── billing/
-│       ├── credits.ts                    # grantCredits, spendCredits, getCreditBalance
-│       ├── packs.ts                      # CREDIT_PACKS, getPack, getDodoProductId
-│       └── dodo.ts                       # createPayment, verifyWebhookSignature
+│   ├── billing/
+│   │   ├── credits.ts                    # grantCredits, spendCredits, getCreditBalance
+│   │   ├── packs.ts                      # CREDIT_PACKS, getPack, getDodoProductId
+│   │   └── dodo.ts                       # createPayment, verifyWebhookSignature
+│   └── constants/
+│       └── social-platforms.ts           # ChannelTypeEnum, CHANNELS, hugeicons-backed icon/url/color/charLimit maps
 │
 ├── components/
 │   ├── ui/                               # 55 shadcn primitives
@@ -194,7 +214,7 @@ Declared in `.dev.vars.example`:
 - `pnpm drizzle-kit generate --name init` — migration generated cleanly with 6 tables, 7 indexes, 3 FKs
 
 ### ❌ NOT yet verified (next agent should do these)
-- **Migration not applied to D1.** Run `pnpm wrangler d1 migrations apply aipostsc-auth-db --local` (and `--remote` for prod). If old `user`/`session` singular tables exist in remote D1 from the previous schema, **drop them first** — the rename is destructive.
+- ~~Migration not applied to D1 locally~~ — **applied 2026-05-22** via `npx wrangler d1 migrations apply aipostsc-auth-db --local`. Auth chain now works end-to-end in dev. **Remote D1 still pending** — run with `--remote` before shipping.
 - **No real OAuth sign-in tested.** Need to copy `.dev.vars.example` → `.dev.vars`, fill in Google credentials, `pnpm cf-typegen`, then `pnpm dev` and test the flow end-to-end in a browser.
 - **No real Dodo payment tested.** Need Dodo test API key + 3 test products configured in their dashboard with prices/credits matching `src/lib/billing/packs.ts`. Webhook endpoint must be registered: `<base-url>/api/webhooks/dodo`.
 - **Dodo REST API shape assumptions:** `src/lib/billing/dodo.ts` uses `POST /payments` with `payment_link: true`, `product_cart`, `customer`, `billing`, `return_url`, `metadata` — verify against current Dodo docs (https://docs.dodopayments.com/) before going live.
@@ -261,3 +281,115 @@ User asked to review an `auth/index.ts` snippet (using `better-auth-cloudflare`)
 ### Verified
 - `tsc --noEmit` clean
 - `next build` clean, all 11 routes registered
+
+---
+
+## 12. Session log — 2026-05-22 (session 2)
+
+User hit `no such table: accounts` on Google login (local D1 had no schema yet), then asked for a constants file, sidebar dropup, profile/settings/billing polish, and a Dodo setup walkthrough.
+
+### Fixes & additions
+- **D1 migration applied locally** — `npx wrangler d1 migrations apply aipostsc-auth-db --local` (15 commands executed). Google sign-in flow now works end-to-end in dev.
+- **Sidebar user menu → dropup** — replaced inline `Log out` row with a `side="top"` `DropdownMenu` containing Profile / Settings / Appearance (submenu: Light / Dark / System via `next-themes`) / Logout. Logout calls `authClient.signOut` then `router.replace("/sign-in")`. Removed redundant standalone logout button.
+- **`/dashboard/profile`** — new route. Server component; pulls user row + credit balance; renders gradient banner with avatar, verified badge, member-since, balance + status cards, and a key/value details table.
+- **`/dashboard/settings`** — fleshed out from stub: Account, Connected providers (Google with Connected badge sourced from `accounts` table), Billing shortcut, Support mailto. Buttons use base-ui `render={<Link/>}` (NOT `asChild` — that prop doesn't exist on this Button).
+- **`/dashboard/billing`** — redesigned: balance card with gradient + Coins icon; 3 pricing cards with per-pack accent gradient (sky / primary / amber), feature checklist (defined in-page, marketing copy only — packs.ts stays canonical for price/credits/Dodo IDs), Popular badge on Creator.
+- **`src/lib/constants/social-platforms.ts`** — `ChannelTypeEnum` + 5 maps (icons, urls, labels, colors, char limits) + ordered `CHANNELS` array + 5 getters. Icons sourced from `@hugeicons/core-free-icons` as `IconSvgElement` data; render with `<HugeiconsIcon icon={...} />` from `@hugeicons/react`.
+- **Packages added:** `@hugeicons/core-free-icons@4.1.4`, `@hugeicons/react@1.1.6`.
+
+### Verified
+- `tsc --noEmit` clean after all changes
+- Local D1 migration succeeded (all 6 tables present)
+
+### NOT verified
+- New pages not yet exercised in a browser (no manual UI check this session)
+- No Dodo test purchase run — env vars in `.dev.vars` not filled in yet
+
+---
+
+## 13. Session log — 2026-05-22 (session 3 — Claude-style billing)
+
+User asked to switch from "pure one-time credits" to **Claude-style monthly resets + lifetime top-ups**. Architectural choices confirmed via AskUserQuestion: Dodo subscriptions (recurring), 25-credit free tier, 3 existing products convert to subscriptions + 1 new top-up SKU. Plan written to `/Users/ishaan/.claude/plans/i-want-expiry-one-virtual-crown.md` and approved.
+
+### Schema changes (drizzle/0000_init.sql regenerated)
+- `users`:
+  - DROP `credit_balance`
+  - ADD `monthly_credit_balance INTEGER NOT NULL DEFAULT 25`
+  - ADD `topup_credit_balance INTEGER NOT NULL DEFAULT 0`
+  - ADD `plan_id TEXT NULL`
+  - ADD `plan_status TEXT NULL` ('active'|'cancelled'|'past_due'|null)
+  - ADD `plan_period_end INTEGER NULL` (timestamp_ms)
+  - ADD `dodo_subscription_id TEXT NULL`
+  - new indexes on `dodo_subscription_id` and `plan_period_end`
+- `credit_transactions`:
+  - REPLACE type enum with `spend | topup_purchase | monthly_grant | monthly_forfeit | refund | bonus | adjustment`
+  - ADD `pool TEXT NOT NULL` ('monthly' | 'topup')
+  - ADD `subscription_id TEXT NULL`, `plan_id TEXT NULL`
+  - new compound index `(user_id, created_at)` for ledger history
+- Since there are no production users, the OLD `0000_init.sql` was deleted and regenerated as a single migration. Local D1 wiped & re-applied (`rm -rf .wrangler/state/v3/d1 && wrangler d1 migrations apply --local`). Remote still pending.
+
+### Core code (rewritten)
+- **`src/lib/billing/credits.ts`** — full rewrite. Public surface:
+  - `getCreditState(userId)` — always lazy-resets via `resetMonthlyCreditsIfDue` first
+  - `spendCredits({ userId, amount, operation, … })` — SELECT → split monthly-first → UPDATE-with-WHERE-balances-guard (optimistic locking, 3 retries) → INSERT 1-or-2 ledger rows
+  - `grantTopupCredits({ userId, amount, packId?, paymentId?, … })`
+  - `resetMonthlyCreditsIfDue(userId)` — atomic; cancelled subs drop back to free tier (planId=null, monthly=25)
+  - `applySubscriptionActive` / `applySubscriptionRenewed` / `applySubscriptionCancelled` / `applySubscriptionPastDue`
+  - `initializeFreeTierUser(userId)` — sets planPeriodEnd=now+30d + writes initial monthly_grant row
+  - Legacy `getCreditBalance(userId)` still works (returns total)
+- **`src/lib/auth.ts`** — added `databaseHooks.user.create.after` calling `initializeFreeTierUser`. Session-create geo snapshot still in place.
+- **`src/lib/billing/packs.ts`** — split into `PLANS` (subscription) + `TOPUP_PACKS` (one-time) + `FREE_TIER_MONTHLY_CREDITS = 25`. New helpers: `getPlan`, `getTopupPack`, `getPlanMonthlyAllotment`, `getDodoPlanProductId`, `getDodoTopupProductId`. Old `CREDIT_PACKS` / `getPack` / `getDodoProductId` removed.
+- **`src/lib/billing/dodo.ts`** — added `createSubscription` (POST `/subscriptions`), `getSubscriptionPeriodEnd` helper. `isSuccessfulPaymentEvent` now strict-checks `evt.type === "payment.succeeded"`.
+- **`src/app/api/billing/checkout/route.ts`** — body shape now `{ purchaseType: 'subscription'|'topup', planId?, packId? }`. Branches to `createSubscription` / `createPayment`. Metadata carries `purchase_type` for the webhook dispatcher.
+
+### Webhook event dispatch matrix (`src/app/api/webhooks/dodo/route.ts`)
+
+| Event type | Action |
+|---|---|
+| `payment.succeeded` w/ `data.subscription_id` | `applySubscriptionRenewed()` — reset monthly + advance plan_period_end |
+| `payment.succeeded` w/ `metadata.purchase_type='topup'` | `grantTopupCredits()` — add to topup pool |
+| `subscription.active` | `applySubscriptionActive()` — link sub to user, set planId/status/periodEnd, reset monthly to plan allotment |
+| `subscription.cancelled` | `applySubscriptionCancelled()` — set status='cancelled'; credits ride out period; lazy reset drops to free tier at period end |
+| `subscription.past_due` / `subscription.payment_failed` | `applySubscriptionPastDue()` — set status='past_due', no credit change |
+| `credit.added` / `credit.deducted` / `credit.expired` / others | recorded into `payment_events` for audit; no runtime action (Dodo's internal entitlement; we don't use it) |
+
+Idempotency: every event hits the `payment_events` insert-or-noop guard BEFORE dispatch — so retries are safe. The dispatch happens only on first delivery.
+
+### ACID / concurrency
+
+- **Atomicity:** every credit mutation is a single guarded UPDATE. If the WHERE doesn't match (lost race), UPDATE returns 0 rows and we retry up to 3x.
+- **Consistency:** invariants `monthly >= 0` and `topup >= 0` enforced by Math.min split; total deducted always equals `amount`. Lazy reset before every spend prevents post-period spending against a stale monthly balance.
+- **Isolation:** optimistic locking using `(monthlyBalance, topupBalance)` as the version pair.
+- **Durability:** D1 commits per statement; webhook returns 2xx only after handler succeeds, so Dodo's retry on 5xx covers any worker crash mid-handler.
+- **SOLID:** `credits.ts` owns mutation primitives only; `packs.ts` owns the catalog; `dodo.ts` owns payment-processor I/O; webhook route is a thin dispatcher. Adding a new plan = entry in `PLANS` + env var. Adding a new event = case in the switch.
+
+### UI updates
+- **`/dashboard/billing`** — completely redesigned: current-plan summary card with monthly-pool progress bar + topup balance, 3 subscription plan cards (with "Current"/"Popular" badges), top-up section with one-time cards.
+- **`/dashboard/profile`** — split into Monthly Pool / Top-up Pool / Total Available cards; account details row added plan/status/periodEnd fields.
+- **`buy-pack-button.tsx`** — split into `SubscribeButton` (handles current-plan / switch / subscribe states) + `BuyTopupButton`. Both POST to `/api/billing/checkout` with different `purchaseType`.
+
+### Env vars renamed/added
+- DROP: `DODO_PRODUCT_STARTER` / `DODO_PRODUCT_CREATOR` / `DODO_PRODUCT_PRO`
+- ADD: `DODO_PLAN_STARTER` / `DODO_PLAN_CREATOR` / `DODO_PLAN_PRO` (subscription product IDs)
+- ADD: `DODO_TOPUP_500` (one-time top-up product ID)
+- `src/env-extra.d.ts` updated to match. Run `pnpm cf-typegen` after filling `.dev.vars`.
+
+### What the user still needs to do on the Dodo dashboard
+1. **Convert each existing product** (Starter / Creator / Pro) from One-time → Subscription, Monthly billing cycle. Keep the existing AI Credits entitlement attached — 30-day expiry, rollover OFF now matches our reset semantics.
+2. **Create 1 new one-time product** "Extra 500 Credits" at $20. **Don't** attach the 30-day AI Credits entitlement (it would clash with "never expires" semantics). If wanted, create a *separate* Never-expiry entitlement and attach that instead.
+3. **Webhook endpoint** at `<tunnel-or-prod-url>/api/webhooks/dodo`, subscribed to:
+   - `payment.succeeded`, `subscription.active`, `subscription.cancelled`, `subscription.past_due` (required)
+   - `credit.added`, `credit.deducted`, `credit.expired` (optional, audit-only)
+   - Copy the `whsec_…` signing secret → `.dev.vars` as `DODO_WEBHOOK_SECRET`.
+4. **Copy the 4 product IDs** into `.dev.vars` under the new var names above.
+
+### Verified this session
+- `tsc --noEmit` clean
+- `drizzle-kit generate --name init` produced clean SQL (6 tables, all expected columns/indexes/FKs)
+- Local D1 wiped & migration re-applied — 18 SQL commands succeeded
+
+### NOT verified this session
+- No live browser run — sign in, watch initializeFreeTierUser write the monthly_grant row, verify all UI states
+- No Dodo test subscription or top-up purchase (webhook secret not configured yet)
+- Concurrency claim (optimistic lock retries) not stress-tested with a parallel-spend script
+- The exact JSON shape of Dodo's `subscription.active`/`subscription.cancelled`/`subscription.past_due` payloads (especially `current_period_end` vs `next_billing_date`) — verify against https://docs.dodopayments.com when first events arrive; the `getSubscriptionPeriodEnd` helper tolerates either key

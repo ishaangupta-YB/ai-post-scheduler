@@ -19,6 +19,12 @@
       "skillPath": "better-auth/create-auth/SKILL.md",
       "computedHash": "31c027d02dbf1faa37f58191f574b9443143042fb2b684fe32df53ab0270487c"
     },
+    "credit-based-billing": {
+      "source": "dodopayments/skills",
+      "sourceType": "github",
+      "skillPath": "dodo-payments/credit-based-billing/SKILL.md",
+      "computedHash": "d9f11fe73bc87eec7eff4303a0f93ab01eac321a7a00f06c6eb5689da26c13c7"
+    },
     "dodo-best-practices": {
       "source": "dodopayments/skills",
       "sourceType": "github",

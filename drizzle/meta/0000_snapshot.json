@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4a8c9390-2038-4711-8d0d-888a564ba6ff",
+  "id": "facbf561-b9a9-4aaf-8b21-b08e4069ba52",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "accounts": {
@@ -321,13 +321,49 @@
           "notNull": false,
           "autoincrement": false
         },
-        "credit_balance": {
-          "name": "credit_balance",
+        "monthly_credit_balance": {
+          "name": "monthly_credit_balance",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 25
+        },
+        "topup_credit_balance": {
+          "name": "topup_credit_balance",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "plan_id": {
+          "name": "plan_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "plan_status": {
+          "name": "plan_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "plan_period_end": {
+          "name": "plan_period_end",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dodo_subscription_id": {
+          "name": "dodo_subscription_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
@@ -353,6 +389,20 @@
             "email"
           ],
           "isUnique": true
+        },
+        "users_dodo_subscription_id_idx": {
+          "name": "users_dodo_subscription_id_idx",
+          "columns": [
+            "dodo_subscription_id"
+          ],
+          "isUnique": false
+        },
+        "users_plan_period_end_idx": {
+          "name": "users_plan_period_end_idx",
+          "columns": [
+            "plan_period_end"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {},
@@ -446,6 +496,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "pool": {
+          "name": "pool",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "amount": {
           "name": "amount",
           "type": "integer",
@@ -469,6 +526,20 @@
         },
         "payment_id": {
           "name": "payment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "subscription_id": {
+          "name": "subscription_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "plan_id": {
+          "name": "plan_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -512,6 +583,14 @@
           ],
           "isUnique": false
         },
+        "credit_transactions_user_id_created_at_idx": {
+          "name": "credit_transactions_user_id_created_at_idx",
+          "columns": [
+            "user_id",
+            "created_at"
+          ],
+          "isUnique": false
+        },
         "credit_transactions_payment_id_idx": {
           "name": "credit_transactions_payment_id_idx",
           "columns": [
@@ -519,10 +598,10 @@
           ],
           "isUnique": false
         },
-        "credit_transactions_created_at_idx": {
-          "name": "credit_transactions_created_at_idx",
+        "credit_transactions_subscription_id_idx": {
+          "name": "credit_transactions_subscription_id_idx",
           "columns": [
-            "created_at"
+            "subscription_id"
           ],
           "isUnique": false
         }

@@ -6,7 +6,10 @@ interface CloudflareEnv {
   DODO_MODE: "test" | "live"
   DODO_API_KEY: string
   DODO_WEBHOOK_SECRET: string
-  DODO_PRODUCT_STARTER?: string
-  DODO_PRODUCT_CREATOR?: string
-  DODO_PRODUCT_PRO?: string
+  // Subscription plan products (recurring monthly)
+  DODO_PLAN_STARTER?: string
+  DODO_PLAN_CREATOR?: string
+  DODO_PLAN_PRO?: string
+  // One-time top-up SKUs (never expire in our ledger)
+  DODO_TOPUP_500?: string
 }

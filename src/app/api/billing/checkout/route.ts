@@ -3,8 +3,17 @@ import { headers } from "next/headers"
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
 import { getAuth } from "@/lib/auth"
-import { createPayment } from "@/lib/billing/dodo"
-import { getPack, getDodoProductId } from "@/lib/billing/packs"
+import { createPayment, createSubscription } from "@/lib/billing/dodo"
+import {
+  getDodoPlanProductId,
+  getDodoTopupProductId,
+  getPlan,
+  getTopupPack,
+} from "@/lib/billing/packs"
+
+type CheckoutBody =
+  | { purchaseType: "subscription"; planId: string }
+  | { purchaseType: "topup"; packId: string }
 
 export async function POST(request: Request) {
   const auth = getAuth()
@@ -14,48 +23,94 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as
-    | { packId?: string }
+    | Partial<CheckoutBody>
     | null
-  const packId = body?.packId
-  if (!packId) {
-    return NextResponse.json({ error: "packId required" }, { status: 400 })
-  }
-
-  const pack = getPack(packId)
-  if (!pack) {
-    return NextResponse.json({ error: "unknown pack" }, { status: 404 })
-  }
-
-  const { env, cf } = getCloudflareContext()
-  const productId = getDodoProductId(env, pack.id)
-  if (!productId) {
+  if (!body?.purchaseType) {
     return NextResponse.json(
-      { error: `pack ${pack.id} not configured` },
-      { status: 500 },
+      { error: "purchaseType required" },
+      { status: 400 },
     )
   }
 
-  const result = await createPayment(env, {
-    productId,
-    customer: {
-      email: session.user.email,
-      name: session.user.name,
-    },
-    billing: {
-      // Dodo requires a billing country for tax. Use the request's CF country as a hint;
-      // their hosted checkout lets the user correct it.
-      country: cf?.country ?? "US",
-    },
-    returnUrl: `${env.BETTER_AUTH_URL}/dashboard/billing?status=success`,
-    metadata: {
-      user_id: session.user.id,
-      pack_id: pack.id,
-      credits: String(pack.credits),
-    },
-  })
+  const { env, cf } = getCloudflareContext()
+  const billingCountry = cf?.country ?? "US"
+  const customer = { email: session.user.email, name: session.user.name }
 
-  return NextResponse.json({
-    paymentId: result.payment_id,
-    checkoutUrl: result.payment_link,
-  })
+  if (body.purchaseType === "subscription") {
+    const planId = body.planId
+    if (!planId) {
+      return NextResponse.json(
+        { error: "planId required for subscription" },
+        { status: 400 },
+      )
+    }
+    const plan = getPlan(planId)
+    if (!plan) {
+      return NextResponse.json({ error: "unknown plan" }, { status: 404 })
+    }
+    const productId = getDodoPlanProductId(env, plan.id)
+    if (!productId) {
+      return NextResponse.json(
+        { error: `plan ${plan.id} not configured` },
+        { status: 500 },
+      )
+    }
+    const result = await createSubscription(env, {
+      productId,
+      customer,
+      billing: { country: billingCountry },
+      returnUrl: `${env.BETTER_AUTH_URL}/dashboard/billing?status=subscribed`,
+      metadata: {
+        user_id: session.user.id,
+        plan_id: plan.id,
+        purchase_type: "subscription",
+      },
+    })
+    return NextResponse.json({
+      subscriptionId: result.subscription_id,
+      checkoutUrl: result.payment_link,
+    })
+  }
+
+  if (body.purchaseType === "topup") {
+    const packId = body.packId
+    if (!packId) {
+      return NextResponse.json(
+        { error: "packId required for topup" },
+        { status: 400 },
+      )
+    }
+    const pack = getTopupPack(packId)
+    if (!pack) {
+      return NextResponse.json({ error: "unknown pack" }, { status: 404 })
+    }
+    const productId = getDodoTopupProductId(env, pack.id)
+    if (!productId) {
+      return NextResponse.json(
+        { error: `pack ${pack.id} not configured` },
+        { status: 500 },
+      )
+    }
+    const result = await createPayment(env, {
+      productId,
+      customer,
+      billing: { country: billingCountry },
+      returnUrl: `${env.BETTER_AUTH_URL}/dashboard/billing?status=topped-up`,
+      metadata: {
+        user_id: session.user.id,
+        pack_id: pack.id,
+        credits: String(pack.credits),
+        purchase_type: "topup",
+      },
+    })
+    return NextResponse.json({
+      paymentId: result.payment_id,
+      checkoutUrl: result.payment_link,
+    })
+  }
+
+  return NextResponse.json(
+    { error: "invalid purchaseType" },
+    { status: 400 },
+  )
 }

@@ -62,6 +62,59 @@ export async function createPayment(
   return (await res.json()) as DodoCreatePaymentResult
 }
 
+// ── Subscriptions ────────────────────────────────────────────────────────────
+// Subscription product = recurring billing. Dodo fires `subscription.active` on
+// activation and `payment.succeeded` (with subscription_id) on each renewal.
+
+export type DodoCreateSubscriptionInput = {
+  productId: string
+  quantity?: number
+  customer: { email: string; name: string }
+  billing: {
+    country: string
+    state?: string
+    city?: string
+    street?: string
+    zipcode?: string
+  }
+  returnUrl: string
+  metadata: Record<string, string>
+}
+
+export type DodoCreateSubscriptionResult = {
+  subscription_id: string
+  payment_link: string
+}
+
+export async function createSubscription(
+  env: DodoEnv,
+  input: DodoCreateSubscriptionInput,
+): Promise<DodoCreateSubscriptionResult> {
+  const res = await fetch(`${baseUrl(env)}/subscriptions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.DODO_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      payment_link: true,
+      product_id: input.productId,
+      quantity: input.quantity ?? 1,
+      customer: input.customer,
+      billing: input.billing,
+      return_url: input.returnUrl,
+      metadata: input.metadata,
+    }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Dodo createSubscription ${res.status}: ${body}`)
+  }
+
+  return (await res.json()) as DodoCreateSubscriptionResult
+}
+
 // ── Webhook signature verification (Standard Webhooks spec) ──────────────────
 // Dodo sends three headers: webhook-id, webhook-timestamp, webhook-signature.
 // The signature header is space-separated `v1,<base64>` pairs (multiple keys
@@ -140,12 +193,24 @@ export type DodoEvent = {
   type: string
   data: {
     payment_id?: string
+    subscription_id?: string
     status?: string
     metadata?: Record<string, string>
+    // Subscription period fields — present on subscription.* events
+    next_billing_date?: string
+    current_period_end?: string
     [k: string]: unknown
   }
 }
 
 export function isSuccessfulPaymentEvent(evt: DodoEvent): boolean {
-  return evt.type === "payment.succeeded" || evt.data?.status === "succeeded"
+  return evt.type === "payment.succeeded"
+}
+
+/** Extracts the period-end Date from a subscription event, preferring `current_period_end`. */
+export function getSubscriptionPeriodEnd(evt: DodoEvent): Date | null {
+  const raw = evt.data?.current_period_end ?? evt.data?.next_billing_date
+  if (!raw) return null
+  const ms = Date.parse(raw)
+  return Number.isFinite(ms) ? new Date(ms) : null
 }

@@ -1,9 +1,20 @@
 "use client"
 
 import Link from "next/link"
-import { LogOut, Plus } from "lucide-react"
+import {
+  ChevronsUpDown,
+  LogOut,
+  Monitor,
+  Moon,
+  Palette,
+  Plus,
+  Settings as SettingsIcon,
+  Sun,
+  User as UserIcon,
+} from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
+import { useTheme } from "next-themes"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -18,9 +29,13 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -52,6 +67,7 @@ type AppSidebarUser = {
 export default function AppSidebar({ user }: { user: AppSidebarUser }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const BrandIcon = mainNav[0].icon
@@ -167,29 +183,90 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
                           {user.email}
                         </span>
                       </div>
+                      <ChevronsUpDown className="ml-auto size-4 opacity-70" />
                     </SidebarMenuButton>
                   }
                 />
                 <DropdownMenuContent
                   align="end"
-                  side="right"
-                  className="min-w-56"
+                  side="top"
+                  sideOffset={8}
+                  className="min-w-60"
                 >
                   <DropdownMenuLabel className="font-normal">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{user.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {user.email}
-                      </span>
+                    <div className="flex items-center gap-2 px-1 py-1.5">
+                      <Avatar className="size-8">
+                        {user.image ? (
+                          <AvatarImage src={user.image} alt={user.name} />
+                        ) : null}
+                        <AvatarFallback>{initials || "?"}</AvatarFallback>
+                      </Avatar>
+                      <div className="grid flex-1 text-left text-sm leading-tight">
+                        <span className="truncate font-medium">{user.name}</span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {user.email}
+                        </span>
+                      </div>
                     </div>
                   </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      onClick={() => router.push("/dashboard/profile")}
+                    >
+                      <UserIcon className="size-4" />
+                      <span>Profile</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => router.push("/dashboard/settings")}
+                    >
+                      <SettingsIcon className="size-4" />
+                      <span>Settings</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <Palette className="size-4" />
+                        <span>Appearance</span>
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent side="top" sideOffset={4}>
+                        <DropdownMenuItem onClick={() => setTheme("light")}>
+                          <Sun className="size-4" />
+                          <span>Light</span>
+                          {theme === "light" ? (
+                            <span className="ml-auto text-xs text-muted-foreground">
+                              ✓
+                            </span>
+                          ) : null}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setTheme("dark")}>
+                          <Moon className="size-4" />
+                          <span>Dark</span>
+                          {theme === "dark" ? (
+                            <span className="ml-auto text-xs text-muted-foreground">
+                              ✓
+                            </span>
+                          ) : null}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setTheme("system")}>
+                          <Monitor className="size-4" />
+                          <span>System</span>
+                          {theme === "system" ? (
+                            <span className="ml-auto text-xs text-muted-foreground">
+                              ✓
+                            </span>
+                          ) : null}
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={handleSignOut}
                     disabled={isSigningOut}
+                    variant="destructive"
                   >
                     <LogOut className="size-4" />
-                    <span>{isSigningOut ? "Signing out…" : "Sign out"}</span>
+                    <span>{isSigningOut ? "Signing out…" : "Log out"}</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

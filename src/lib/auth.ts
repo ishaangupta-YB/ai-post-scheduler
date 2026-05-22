@@ -4,6 +4,7 @@ import { nextCookies } from "better-auth/next-js"
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
 import { getDb, schema } from "@/db"
+import { initializeFreeTierUser } from "@/lib/billing/credits"
 
 function kvSecondaryStorage(kv: KVNamespace) {
   return {
@@ -84,6 +85,15 @@ function buildAuth(env: CloudflareEnv) {
                 longitude: cf.longitude ?? null,
               },
             }
+          },
+        },
+      },
+      user: {
+        create: {
+          after: async (user) => {
+            // Seed free-tier monthly period + initial monthly_grant ledger row.
+            // monthlyCreditBalance default (25) is already written by the INSERT.
+            await initializeFreeTierUser(user.id)
           },
         },
       },

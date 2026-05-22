@@ -1,54 +1,123 @@
-// Credit packs — keep IDs stable; they're referenced by ledger rows and Dodo product IDs.
-// `dodoProductId` is set per-environment via env vars so test/live keys map to different products.
-export type CreditPack = {
+// Catalog of subscription plans and one-time top-up packs.
+// All IDs are stable — they're referenced in the credit ledger and stored on user rows.
+// Per-environment Dodo product IDs come from env vars (.dev.vars / wrangler secrets).
+
+export type Plan = {
   id: string
   label: string
-  credits: number
-  // Display-only — actual price is enforced by Dodo on the product itself.
+  /** Credits issued each monthly period. Resets to this number on renewal. */
+  monthlyCredits: number
+  /** Display-only price; canonical price lives on the Dodo product itself. */
   priceUsd: number
   description: string
+  features: string[]
   popular?: boolean
 }
 
-export const CREDIT_PACKS: CreditPack[] = [
+export type TopupPack = {
+  id: string
+  label: string
+  credits: number
+  priceUsd: number
+  description: string
+}
+
+// Monthly subscription plans. Each user can hold AT MOST one. Free-tier users have planId=null.
+export const PLANS: readonly Plan[] = [
   {
     id: "starter",
     label: "Starter",
-    credits: 100,
+    monthlyCredits: 100,
     priceUsd: 5,
-    description: "~50 AI-generated posts. Good for trying it out.",
+    description: "~50 AI drafts every month. Good for solo creators.",
+    features: [
+      "100 credits / month",
+      "Connect 1 social account",
+      "Basic scheduling queue",
+      "Community support",
+    ],
   },
   {
     id: "creator",
     label: "Creator",
-    credits: 500,
+    monthlyCredits: 500,
     priceUsd: 20,
-    description: "~250 posts. Best value for active creators.",
+    description: "~250 AI drafts every month. Best value.",
+    features: [
+      "500 credits / month",
+      "Connect up to 5 accounts",
+      "Persona tuning & tone match",
+      "Optimal-time analytics",
+      "Priority support",
+    ],
     popular: true,
   },
   {
     id: "pro",
     label: "Pro",
-    credits: 2000,
+    monthlyCredits: 2000,
     priceUsd: 70,
-    description: "~1000 posts. For agencies and heavy users.",
+    description: "~1,000 AI drafts every month. For agencies.",
+    features: [
+      "2,000 credits / month",
+      "Unlimited social accounts",
+      "Custom AI persona models",
+      "Advanced analytics & exports",
+      "Dedicated onboarding",
+    ],
   },
 ]
 
-export function getPack(id: string): CreditPack | undefined {
-  return CREDIT_PACKS.find((p) => p.id === id)
+export const FREE_TIER_MONTHLY_CREDITS = 25
+
+/** A free monthly period is exactly 30 days. Paid plans are driven by Dodo's billing cycle. */
+export const FREE_TIER_PERIOD_DAYS = 30
+
+// One-time top-up packs. These NEVER expire — they accumulate in topupCreditBalance forever.
+export const TOPUP_PACKS: readonly TopupPack[] = [
+  {
+    id: "topup_500",
+    label: "Extra 500 credits",
+    credits: 500,
+    priceUsd: 20,
+    description: "One-time top-up. Never expires.",
+  },
+]
+
+export function getPlan(planId: string | null | undefined): Plan | undefined {
+  if (!planId) return undefined
+  return PLANS.find((p) => p.id === planId)
 }
 
-// Maps our internal pack id -> Dodo product id, from env vars set per environment.
-// Set DODO_PRODUCT_STARTER, DODO_PRODUCT_CREATOR, DODO_PRODUCT_PRO in .dev.vars / wrangler secrets.
-export function getDodoProductId(
+export function getTopupPack(packId: string): TopupPack | undefined {
+  return TOPUP_PACKS.find((p) => p.id === packId)
+}
+
+/** Allotment to reset monthly_credit_balance to. Free tier when planId is null. */
+export function getPlanMonthlyAllotment(planId: string | null | undefined): number {
+  const plan = getPlan(planId)
+  return plan ? plan.monthlyCredits : FREE_TIER_MONTHLY_CREDITS
+}
+
+// Maps internal plan/pack ids → Dodo product IDs from env vars. Set per environment.
+export function getDodoPlanProductId(
+  env: CloudflareEnv,
+  planId: string,
+): string | undefined {
+  const map: Record<string, string | undefined> = {
+    starter: env.DODO_PLAN_STARTER,
+    creator: env.DODO_PLAN_CREATOR,
+    pro: env.DODO_PLAN_PRO,
+  }
+  return map[planId]
+}
+
+export function getDodoTopupProductId(
   env: CloudflareEnv,
   packId: string,
 ): string | undefined {
   const map: Record<string, string | undefined> = {
-    starter: env.DODO_PRODUCT_STARTER,
-    creator: env.DODO_PRODUCT_CREATOR,
-    pro: env.DODO_PRODUCT_PRO,
+    topup_500: env.DODO_TOPUP_500,
   }
   return map[packId]
 }

@@ -3,13 +3,26 @@ import { getCloudflareContext } from "@opennextjs/cloudflare"
 
 import { getDb, paymentEvents } from "@/db"
 import {
-  isSuccessfulPaymentEvent,
+  getSubscriptionPeriodEnd,
   verifyWebhookSignature,
   type DodoEvent,
 } from "@/lib/billing/dodo"
-import { grantCredits } from "@/lib/billing/credits"
-import { getPack } from "@/lib/billing/packs"
+import {
+  applySubscriptionActive,
+  applySubscriptionCancelled,
+  applySubscriptionPastDue,
+  applySubscriptionRenewed,
+  grantTopupCredits,
+} from "@/lib/billing/credits"
+import { getTopupPack } from "@/lib/billing/packs"
 
+// Dual-system note: our products on Dodo also carry the "AI Credits" entitlement, so
+// Dodo will internally track credits and fire credit.added/credit.deducted/credit.expired
+// events. We deliberately ignore those for credit math — our D1 ledger is the runtime
+// source of truth. Those events still get recorded into payment_events for audit.
+//
+// All routing happens AFTER the dedup insert below, so every event is recorded exactly
+// once regardless of whether we act on it.
 export const runtime = "edge"
 
 export async function POST(request: Request) {
@@ -44,7 +57,7 @@ export async function POST(request: Request) {
 
   const db = getDb()
 
-  // Idempotency — Dodo retries on non-2xx. Record-or-noop on the event id.
+  // Idempotency — Dodo retries on non-2xx. Record-or-noop on the event id BEFORE dispatch.
   const inserted = await db
     .insert(paymentEvents)
     .values({
@@ -56,39 +69,128 @@ export async function POST(request: Request) {
     .returning({ eventId: paymentEvents.eventId })
 
   if (inserted.length === 0) {
-    // Already processed.
     return NextResponse.json({ ok: true, deduplicated: true })
   }
 
-  if (!isSuccessfulPaymentEvent(evt)) {
-    // Recorded for audit, no action needed.
-    return NextResponse.json({ ok: true })
-  }
+  // ── Dispatch matrix ──────────────────────────────────────────────────────
+  try {
+    switch (evt.type) {
+      case "payment.succeeded":
+        return await handlePaymentSucceeded(evt, webhookId)
 
+      case "subscription.active":
+        return await handleSubscriptionActive(evt)
+
+      case "subscription.cancelled":
+        return await handleSubscriptionCancelled(evt)
+
+      case "subscription.past_due":
+      case "subscription.payment_failed":
+        return await handleSubscriptionPastDue(evt)
+
+      default:
+        // Includes credit.added, credit.deducted, credit.expired, subscription.renewed
+        // (when present), refund.* — recorded for audit, no runtime action.
+        return NextResponse.json({ ok: true, recorded: true })
+    }
+  } catch (err) {
+    // Surface as 5xx so Dodo retries. Idempotency on payment_events makes retries safe.
+    console.error("dodo webhook handler error", { type: evt.type, err })
+    return NextResponse.json(
+      { error: "handler failed" },
+      { status: 500 },
+    )
+  }
+}
+
+// ── Handlers ────────────────────────────────────────────────────────────────
+
+async function handlePaymentSucceeded(evt: DodoEvent, webhookId: string) {
   const meta = evt.data?.metadata ?? {}
-  const userId = meta.user_id
-  const packId = meta.pack_id
+  const purchaseType = meta.purchase_type
+  const subscriptionId = evt.data?.subscription_id
   const paymentId = evt.data?.payment_id ?? webhookId
 
-  if (!userId || !packId) {
-    // Missing metadata means we can't credit a user. 200 so Dodo doesn't retry forever.
-    return NextResponse.json({ ok: true, skipped: "missing metadata" })
+  // A subscription's recurring monthly charge — reset monthly + advance period_end.
+  // Subscription's INITIAL charge ALSO sends payment.succeeded, but subscription.active
+  // is what actually links the subscription to the user. So if subscriptionId is set
+  // AND we already have a user with that subscriptionId, treat it as a renewal. The
+  // applySubscriptionRenewed helper is a no-op if the subscription isn't known yet.
+  if (subscriptionId) {
+    const periodEnd = getSubscriptionPeriodEnd(evt) ?? defaultNextPeriodEnd()
+    await applySubscriptionRenewed({
+      dodoSubscriptionId: subscriptionId,
+      periodEnd,
+      paymentId,
+    })
+    return NextResponse.json({ ok: true, action: "subscription_renewed" })
   }
 
-  const pack = getPack(packId)
-  if (!pack) {
-    return NextResponse.json({ ok: true, skipped: "unknown pack" })
+  // One-time top-up payment.
+  if (purchaseType === "topup") {
+    const userId = meta.user_id
+    const packId = meta.pack_id
+    if (!userId || !packId) {
+      return NextResponse.json({ ok: true, skipped: "missing metadata" })
+    }
+    const pack = getTopupPack(packId)
+    if (!pack) {
+      return NextResponse.json({ ok: true, skipped: "unknown pack" })
+    }
+    await grantTopupCredits({
+      userId,
+      amount: pack.credits,
+      packId: pack.id,
+      paymentId,
+      description: `Purchased ${pack.label}`,
+      metadata: { eventId: webhookId, eventType: evt.type },
+    })
+    return NextResponse.json({ ok: true, action: "topup_granted", credits: pack.credits })
   }
 
-  await grantCredits({
+  // Unrecognized payment shape — recorded for audit, no credit action.
+  return NextResponse.json({ ok: true, skipped: "no actionable metadata" })
+}
+
+async function handleSubscriptionActive(evt: DodoEvent) {
+  const meta = evt.data?.metadata ?? {}
+  const userId = meta.user_id
+  const planId = meta.plan_id
+  const subscriptionId = evt.data?.subscription_id
+
+  if (!userId || !planId || !subscriptionId) {
+    return NextResponse.json({ ok: true, skipped: "missing identifiers" })
+  }
+
+  const periodEnd = getSubscriptionPeriodEnd(evt) ?? defaultNextPeriodEnd()
+  await applySubscriptionActive({
     userId,
-    amount: pack.credits,
-    type: "purchase",
-    description: `Purchased ${pack.label} pack`,
-    paymentId,
-    packId: pack.id,
-    metadata: { eventId: webhookId, eventType: evt.type },
+    planId,
+    dodoSubscriptionId: subscriptionId,
+    periodEnd,
   })
+  return NextResponse.json({ ok: true, action: "subscription_activated" })
+}
 
-  return NextResponse.json({ ok: true, credited: pack.credits })
+async function handleSubscriptionCancelled(evt: DodoEvent) {
+  const subscriptionId = evt.data?.subscription_id
+  if (!subscriptionId) {
+    return NextResponse.json({ ok: true, skipped: "no subscription_id" })
+  }
+  await applySubscriptionCancelled({ dodoSubscriptionId: subscriptionId })
+  return NextResponse.json({ ok: true, action: "subscription_cancelled" })
+}
+
+async function handleSubscriptionPastDue(evt: DodoEvent) {
+  const subscriptionId = evt.data?.subscription_id
+  if (!subscriptionId) {
+    return NextResponse.json({ ok: true, skipped: "no subscription_id" })
+  }
+  await applySubscriptionPastDue({ dodoSubscriptionId: subscriptionId })
+  return NextResponse.json({ ok: true, action: "subscription_past_due" })
+}
+
+/** Fallback when Dodo doesn't send a period_end — 30 days from now. */
+function defaultNextPeriodEnd(): Date {
+  return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 }

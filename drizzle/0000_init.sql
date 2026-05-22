@@ -44,12 +44,19 @@ CREATE TABLE `users` (
 	`email` text NOT NULL,
 	`email_verified` integer DEFAULT false NOT NULL,
 	`image` text,
-	`credit_balance` integer DEFAULT 0 NOT NULL,
+	`monthly_credit_balance` integer DEFAULT 25 NOT NULL,
+	`topup_credit_balance` integer DEFAULT 0 NOT NULL,
+	`plan_id` text,
+	`plan_status` text,
+	`plan_period_end` integer,
+	`dodo_subscription_id` text,
 	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
 	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);--> statement-breakpoint
+CREATE INDEX `users_dodo_subscription_id_idx` ON `users` (`dodo_subscription_id`);--> statement-breakpoint
+CREATE INDEX `users_plan_period_end_idx` ON `users` (`plan_period_end`);--> statement-breakpoint
 CREATE TABLE `verifications` (
 	`id` text PRIMARY KEY NOT NULL,
 	`identifier` text NOT NULL,
@@ -64,10 +71,13 @@ CREATE TABLE `credit_transactions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
 	`type` text NOT NULL,
+	`pool` text NOT NULL,
 	`amount` integer NOT NULL,
 	`balance_after` integer NOT NULL,
 	`description` text,
 	`payment_id` text,
+	`subscription_id` text,
+	`plan_id` text,
 	`pack_id` text,
 	`operation` text,
 	`metadata` text,
@@ -76,8 +86,9 @@ CREATE TABLE `credit_transactions` (
 );
 --> statement-breakpoint
 CREATE INDEX `credit_transactions_user_id_idx` ON `credit_transactions` (`user_id`);--> statement-breakpoint
+CREATE INDEX `credit_transactions_user_id_created_at_idx` ON `credit_transactions` (`user_id`,`created_at`);--> statement-breakpoint
 CREATE INDEX `credit_transactions_payment_id_idx` ON `credit_transactions` (`payment_id`);--> statement-breakpoint
-CREATE INDEX `credit_transactions_created_at_idx` ON `credit_transactions` (`created_at`);--> statement-breakpoint
+CREATE INDEX `credit_transactions_subscription_id_idx` ON `credit_transactions` (`subscription_id`);--> statement-breakpoint
 CREATE TABLE `payment_events` (
 	`event_id` text PRIMARY KEY NOT NULL,
 	`event_type` text NOT NULL,
