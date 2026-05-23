@@ -184,7 +184,7 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
 
           <SidebarGroup className="mt-3">
             <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/80 uppercase px-2 mb-1.5">
-              Connect Integrations
+              Integrations
             </SidebarGroupLabel>
             <SidebarGroupContent className="px-2">
               <Link
@@ -204,7 +204,7 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
                     ))}
                   </div>
                   <span className="text-sm font-medium truncate">
-                    Integrations
+                    Connect
                   </span>
                 </div>
                 <span className="text-xs font-mono tabular-nums text-muted-foreground group-hover/integrations:text-foreground transition-colors">

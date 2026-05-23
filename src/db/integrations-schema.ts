@@ -18,7 +18,6 @@ export const integrationPlatforms = [
   "THREADS",
   "FACEBOOK",
   "LINKEDIN",
-  "BLUESKY",
   "YOUTUBE",
   "TIKTOK",
 ] as const

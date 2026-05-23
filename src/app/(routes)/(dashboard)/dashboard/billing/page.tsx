@@ -13,13 +13,10 @@ import {
 } from "@/lib/billing/packs"
 
 import { DashboardPageHeader } from "../../_common/dashboard-page-header"
-import { mainNav } from "../../_common/dashboard-nav"
 import { BuyTopupButton } from "./_components/buy-pack-button"
 import { BillingPlansSection } from "./_components/billing-plans-section"
 
 export const dynamic = "force-dynamic"
-
-const page = mainNav.find((item) => item.name === "Billing")!
 
 function formatDate(d: Date | null | undefined) {
   if (!d) return "—"
@@ -44,7 +41,10 @@ export default async function BillingPage() {
 
   return (
     <div className="flex flex-col gap-10">
-      <DashboardPageHeader title={page.name} description={page.description} />
+      <DashboardPageHeader
+        title="Billing"
+        description="Manage your subscription, top up credits, and review your plan usage."
+      />
 
       {/* Current plan / balance summary */}
       <section className="relative overflow-hidden rounded-xl border border-border bg-card">

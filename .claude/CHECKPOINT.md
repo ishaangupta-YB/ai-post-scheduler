@@ -492,3 +492,135 @@ User asked to (1) add monthly **and annual** subscription billing, (2) rename th
 1. Create 3 new Subscription products (Yearly billing cycle): Starter Annual $50, Creator Annual $200, Pro Annual $700. Attach the same "AI Credits" entitlement as the monthly variants.
 2. Copy the 3 new product IDs into `.dev.vars` as `DODO_PLAN_STARTER_ANNUAL` / `_CREATOR_ANNUAL` / `_PRO_ANNUAL`.
 3. Run `pnpm cf-typegen` to refresh `cloudflare-env.d.ts`.
+
+---
+
+## 16. Session log — 2026-05-24 (session 6 — Billing fix · Bluesky removal · Real OAuth integrations · Docs)
+
+User reported a runtime `TypeError` on `/dashboard/billing` and asked for (1) the fix, (2) full OAuth wiring for social-media integrations (no Bluesky), and (3) project documentation (`architecture.md`, `db-schema.md`, root `CLAUDE.md`).
+
+### Decisions taken (via AskUserQuestion)
+- **Disconnect = soft.** Keep the integration row, set `status='revoked'`, null tokens. Preserves history and avoids the `scheduled_posts` cascade. Re-connect upserts back to `active`.
+- **Routes = dedicated sub-paths.** `/api/integrations/connect`, `/callback`, `/disconnect` — mirrors the user's pseudocode pattern. `/api/integrations` stays GET-only for listing.
+- **Tokens at rest = AES-GCM-256.** New required secret `INTEGRATION_TOKEN_KEK` (32 base64-encoded random bytes). Web Crypto only — works in both nodejs and edge runtimes.
+
+### Fixes
+- **`/dashboard/billing` TypeError.** `billing/page.tsx` was doing `mainNav.find(item => item.name === "Billing")!`, but "Billing" was never in `mainNav` — the `!` lied and `page.name` blew up at render. Replaced with hardcoded `title="Billing"` + description, matching the pattern in `profile/page.tsx` and `integrations/page.tsx`. Dropped the now-unused `mainNav` import.
+
+### Bluesky removal
+- Dropped `BLUESKY` from `IntegrationTypeEnum` + all 5 metadata records + `INTEGRATIONS` array order in `src/lib/constants/integrations.tsx`. Removed the `BlueskyIcon` SVG component.
+- Dropped `"BLUESKY"` from `integrationPlatforms` tuple in `src/db/integrations-schema.ts`.
+- Regenerated `drizzle/0000_init.sql` (single-migration policy — no prod users). 10 tables, all expected columns/indexes; `integrationPlatforms` now contains 7 values.
+- Wiped local D1 (`rm -rf .wrangler/state/v3/d1`) and re-applied — 30 SQL commands executed successfully.
+
+### OAuth foundation (`src/lib/oauth/`)
+- **`crypto.ts`** — `encrypt` / `decrypt` / `encryptNullable` / `decryptNullable`. AES-GCM-256. IV is 12 random bytes per encryption, output format `${b64u(iv)}.${b64u(ct)}`. KEK is loaded once and cached. Decoded KEK length is validated to be exactly 32 bytes.
+- **`state.ts`** — HMAC-SHA256 signed state token. Reuses `BETTER_AUTH_SECRET` (10-min TTL — no rotation concern). Payload: `{ userId, platform, redirectTo, nonce, exp }`. `verifyOAuthState` does constant-time signature compare + platform whitelist + exp check.
+- **`pkce.ts`** — `createPkcePair()` returns 48 random bytes verifier + SHA-256 S256 challenge. `getPkceCookieName(state)` returns `bs_pkce_${b64u(sha256(state)).slice(0,16)}` so the verifier-state binding is cryptographic and the cookie name fits within practical limits.
+- **`types.ts`** — `OAuthProvider` interface, `OAuthToken`, `OAuthProfile`, `ProviderNotConfiguredError`, `OAuthExchangeError`.
+- **`index.ts`** — `getOAuthProvider(platform)` factory. `getProviderConfig(platform)` reads `<PLATFORM>_CLIENT_ID/CLIENT_SECRET/AUTH_URL/TOKEN_URL/PROFILE_URL/SCOPES` from `getCloudflareContext().env` and throws `ProviderNotConfiguredError({missing})` if anything is empty. `getAppUrl()` reads `NEXT_PUBLIC_APP_URL`.
+
+### Providers (`src/lib/oauth/providers/`)
+Seven implementations of `OAuthProvider` + a `_shared.ts` helper (`formUrlencoded`, `parseTokenResponse`, `postForm`, `fetchJson`, `basicAuthHeader`):
+- **`twitter.ts`** — PKCE (S256). Token exchange uses Basic auth header. Profile via `users/me?user.fields=profile_image_url,username`. ProviderAccountId = `data.id`, handle = `data.username`.
+- **`linkedin.ts`** — No PKCE. Profile via `/v2/userinfo` (OpenID Connect). ProviderAccountId = `sub`.
+- **`instagram.ts`** — Facebook Login flow. Profile fetches `/me/accounts?fields=…instagram_business_account{…}` and picks the first page with a linked IG Business account. Errors clearly if none.
+- **`threads.ts`** — Threads-specific. Profile uses `access_token` query param (not bearer header — Threads' quirk).
+- **`facebook.ts`** — Pages OAuth. Profile via `/me?fields=id,name,picture`.
+- **`youtube.ts`** — Google OAuth (separate Cloud OAuth client from the sign-in Google one). Sends `access_type=offline&prompt=consent` to get a refresh token. Profile via Google's userinfo endpoint.
+- **`tiktok.ts`** — Login Kit. Uses `client_key` parameter (not `client_id`). Profile via `/v2/user/info/?fields=open_id,union_id,…`.
+
+### API routes
+- **NEW `src/app/api/integrations/connect/route.ts` (POST)** — auth-gated. Validates platform against `integrationPlatforms`. Loads provider (503 with `missing` list on `ProviderNotConfiguredError`). Signs state via `createOAuthState`. Creates PKCE pair if `provider.usesPkce`. Builds authorization URL. Returns `{ url }`. If PKCE used, sets HTTP-only `bs_pkce_<hash>` cookie with the verifier (10-min maxAge, SameSite=Lax).
+- **NEW `src/app/api/integrations/callback/route.ts` (GET)** — handles OAuth redirect. Reads `code`/`state`/`error` query params. Verifies state HMAC. Cross-checks `session.user.id === state.userId`. Reads PKCE cookie for Twitter. Calls `provider.exchangeCodeForToken` then `provider.getProfile`. AES-GCM encrypts both tokens. Upserts into `integrations` via `.onConflictDoUpdate({ target: [userId, platform], set: {…, status:'active', updatedAt: now} })`. Clears PKCE cookie. Redirects to `redirectTo?connected=true&platform=…`. On any failure → `?connected=false&error=<reason>`.
+- **NEW `src/app/api/integrations/disconnect/route.ts` (POST)** — auth-gated. UPDATEs row scoped to `(id, user_id)`: nulls tokens, sets `status='revoked'`. Returns 404 if no row matched, else `{ ok: true }`.
+- **EDIT `src/app/api/integrations/route.ts`** — removed the old 501 `POST` stub and the hard-delete `DELETE` handler. Kept `GET` unchanged (sidebar polling still works).
+
+### UI updates
+- **`integration-row-actions.tsx`** — `ConnectButton` now POSTs to `/api/integrations/connect`, treats 503 as "Coming soon" toast, and on 200 does `window.location.href = json.url` (full-page redirect to provider). `DisconnectButton` now POSTs to `/api/integrations/disconnect` instead of the old DELETE. Both keep dispatching the `integrations:updated` event for sidebar refresh.
+- **NEW `_components/callback-toast-banner.tsx`** — client component. Reads `?connected=true&platform=X` or `?connected=false&error=Y` via `useSearchParams()`, fires a `toast.success` / `toast.error` once on mount, then strips the query string with `router.replace`. Wrapped in `<Suspense>` in the integrations page (App Router requires it for `useSearchParams`).
+
+### Env vars
+- **`.dev.vars.example`** — appended full `*_CLIENT_ID/CLIENT_SECRET/AUTH_URL/TOKEN_URL/PROFILE_URL/SCOPES` blocks for INSTAGRAM, THREADS, FACEBOOK, YOUTUBE, TIKTOK. Added comments per provider. Added `INTEGRATION_TOKEN_KEK=` with generation instructions (`openssl rand -base64 32`). TWITTER and LINKEDIN blocks were already present.
+- **`src/env-extra.d.ts`** — added `NEXT_PUBLIC_APP_URL?`, `BETTER_AUTH_SECRET?`, 42 OAuth fields (7 providers × 6 keys), and `INTEGRATION_TOKEN_KEK?`. All optional — `getProviderConfig()` surfaces missing keys as 503s, not type errors.
+
+### Documentation
+- **NEW `.claude/architecture.md`** — stack, module map, auth flow, billing flow, integrations OAuth flow with ASCII diagram, security model, deployment commands, "Adding a new platform" recipe.
+- **NEW `.claude/db-schema.md`** — ER overview, table-by-table reference for all 10 tables (columns/types/indexes/notes), cascade chain notes.
+- **NEW `CLAUDE.md` (repo root)** — operating guide. Points at `.claude/{CHECKPOINT,architecture,db-schema}.md`. Convention reminders (no `better-auth-cloudflare`; two-pool credits; `getDb()`; soft-disconnect; AES-GCM-256 tokens; etc.). Verified-pipeline list.
+
+### Verified this session
+- `pnpm exec tsc --noEmit` — clean
+- `pnpm drizzle-kit generate --name init` — single migration, 10 tables, 7 platform enum values
+- `pnpm exec next build` — clean; **all OAuth routes registered**: `/api/integrations/{connect,callback,disconnect}` + GET-only `/api/integrations`
+- Local D1 wiped + migration applied — 30 SQL commands succeeded
+
+### NOT verified this session
+- **No live OAuth round-trip with a real provider.** Env vars not filled; redirect URIs not registered on any provider dashboard. The 503 path (provider not configured) is exercised in code but not manually clicked.
+- No `INTEGRATION_TOKEN_KEK` set in `.dev.vars`. Connect attempts will succeed at the redirect step but crash on the callback's `encryptNullable` call until the KEK is provided.
+- No remote D1 migration applied.
+- Concurrency / parallel-connect race not stress-tested. `onConflictDoUpdate` should handle two simultaneous callbacks for the same `(userId, platform)` cleanly — last writer wins.
+- Token refresh logic — not implemented. Stored `refresh_token` is encrypted but no rehydration helper yet. When the publisher daemon needs to post, it'll call a future `refreshIntegrationTokens(integrationId)` (TODO).
+
+### User TODO before going live
+1. **Generate the encryption KEK** — `openssl rand -base64 32` → paste into `.dev.vars` as `INTEGRATION_TOKEN_KEK=`. Set as a Workers Secret in prod via `wrangler secret put INTEGRATION_TOKEN_KEK`.
+2. **Set `NEXT_PUBLIC_APP_URL`** in `.dev.vars` (default `http://localhost:3000` for dev).
+3. **Register OAuth apps on each provider's developer portal** (X, LinkedIn, Meta-for-Threads/Instagram/Facebook, Google Cloud Console for YouTube, TikTok for Developers). For each:
+   - Set the redirect URI: `<NEXT_PUBLIC_APP_URL>/api/integrations/callback`
+   - Copy client id + secret into `.dev.vars`
+4. **Run `pnpm cf-typegen`** to refresh `cloudflare-env.d.ts` after editing `.dev.vars`.
+5. **Apply remote migration** before shipping: `npx wrangler d1 migrations apply aipostsc-auth-db --remote`.
+
+---
+
+## 17. Session log — 2026-05-24 (session 7 — OAuth audit & hardening + tunnel guidance)
+
+User asked to verify the OAuth integration code actually works without breaking anything, cross-reference the `TechWithEmmaYT/Lemon-AI-SocialMedia-Scheduling-SaaS/lib/social-oauth` open-source repo, validate against the latest 2024-2026 provider docs, and explain whether they need ngrok or Cloudflare Tunnel.
+
+### Cross-references checked
+- **Lemon-AI repo** (scraped end-to-end): `index.ts` (provider factory + requestToken + refresh), `types.ts`, `state.ts`, `pkce.ts`, `encryption.ts`, all three API routes. Architectural alignment is high — same env-driven provider config, same `{b64u_payload}.{b64u_sig}` HMAC state, same PKCE-only-for-Twitter, same state-hashed PKCE cookie name. Our soft-disconnect is actually stricter than theirs (they null tokens but never set a status enum).
+- **Provider docs** for X / LinkedIn / Instagram Graph / Threads / Facebook Pages / YouTube / TikTok confirmed: provider URLs (`x.com`, `api.x.com`, `threads.net`, `graph.threads.net`, `www.tiktok.com`, `open.tiktokapis.com`) are current; LinkedIn has migrated to OIDC `/v2/userinfo`; Meta family returns short-lived (1 hr) tokens that need long-lived exchange; YouTube needs `openid,email,profile` alongside YouTube scopes for `sub` in userinfo response; TikTok uses `client_key` (not `client_id`).
+
+### 9 fixes shipped this session
+
+| # | File | Fix | Severity |
+|---|---|---|---|
+| 1 | `src/app/api/integrations/callback/route.ts` | Strict allowlist for `safeRedirectPath` — rejects anything that isn't a `/dashboard/*` path with no `..`, `\\`, `:`, or `//` prefix. Falls back to `/dashboard/integrations`. | HIGH (defense-in-depth open-redirect) |
+| 2 | `src/lib/oauth/state.ts` + `src/lib/oauth/crypto.ts` | `split(".")` now verified to yield exactly 2 segments; malformed `a.b.c.d` rejected. | LOW |
+| 3 | `.dev.vars.example` | Dropped `media.write` from `TWITTER_SCOPES` (not a documented X scope — `tweet.write` already covers media upload via v2/media/upload). | LOW |
+| 4 | `src/lib/oauth/providers/{threads,instagram,facebook}.ts` | Added TODO comments documenting the short-lived → long-lived (60d) Meta token exchange — `grant_type=refresh_token` is not supported by these providers, so `refreshToken` is intentionally omitted. | informational |
+| 5 | `src/lib/oauth/types.ts` + `src/lib/oauth/providers/{twitter,linkedin,youtube,tiktok}.ts` + NEW `src/lib/oauth/refresh.ts` | Added optional `refreshToken` to `OAuthProvider`. Implemented for the 4 standards-conforming providers. `refreshIntegrationTokens(integrationId, userId)` decrypts → calls provider → re-encrypts → UPDATE. Not wired yet; primitive for the future publisher daemon. | NEW feature |
+| 6 | `src/app/api/integrations/callback/route.ts` | Captures provider error message into `?details=…` (length-bounded, %-encoded). `console.error` includes platform + userId. Toast banner now shows `(details)` inline. | LOW |
+| 7 | `src/app/api/integrations/disconnect/route.ts` | SELECT row first; verify platform is in `integrationPlatforms` whitelist before UPDATE. Defense-in-depth — user-scoped UPDATE already blocked auth bypass. | LOW |
+| 8 | `src/app/api/integrations/callback/route.ts` | `profile.raw` capped at 4 KB JSON before persisting to `metadata`; oversized entries wrap with `{ _truncated: true, _bytes, head }`. | LOW |
+| 9 | `src/app/(routes)/(dashboard)/dashboard/integrations/_components/integration-row-actions.tsx` | 503 response's `missing: [...]` env-var list now shown in the "Coming soon" toast description. | UX |
+
+### Files added / modified
+- ADDED: `src/lib/oauth/refresh.ts`
+- MODIFIED: `src/lib/oauth/types.ts`, `src/lib/oauth/state.ts`, `src/lib/oauth/crypto.ts`, `src/lib/oauth/providers/{twitter,linkedin,youtube,tiktok,facebook,instagram,threads}.ts`, `src/app/api/integrations/callback/route.ts`, `src/app/api/integrations/disconnect/route.ts`, `src/app/(routes)/(dashboard)/dashboard/integrations/_components/integration-row-actions.tsx`, `src/app/(routes)/(dashboard)/dashboard/integrations/_components/callback-toast-banner.tsx`, `.dev.vars.example`.
+- DOCS: `.claude/architecture.md` (Security + Local-dev sections), `CLAUDE.md` (tunnel note), this CHECKPOINT entry.
+
+### Verified
+- `pnpm exec tsc --noEmit` — clean
+- `pnpm exec next build` — clean; all 4 OAuth routes still register (`/api/integrations`, `/connect`, `/callback`, `/disconnect`).
+
+### NOT verified (unchanged from session 6)
+- Live OAuth round-trip with any real provider — needs tunnel + filled `.dev.vars` + registered OAuth apps.
+- Concurrent connect race for the same `(userId, platform)` — `onConflictDoUpdate` should serialize cleanly; not stress-tested.
+- Long-lived token exchange for Meta providers (Threads/IG/FB) — out of scope; needs publisher-daemon design first.
+
+### HTTPS tunnel guidance (the user asked: do I need ngrok or Cloudflare Tunnel?)
+
+**Yes**, for every provider except YouTube. The required redirect URI must be **HTTPS** with a public hostname; `http://localhost` is rejected by Twitter, LinkedIn, Meta (FB/IG/Threads), and TikTok dev portals. Google (YouTube) is the lone exception that allows `http://localhost:<port>`.
+
+Recommendation: **Cloudflare Tunnel** (since the project already runs on Cloudflare Workers). Free, integrates with the existing CF account, and supports named/persistent tunnels via Zero Trust.
+
+```bash
+brew install cloudflared
+cloudflared tunnel --url http://localhost:3000
+# → https://<random>.trycloudflare.com
+```
+
+Register `https://<tunnel>/api/integrations/callback` as the redirect URI on each provider's portal. Set `NEXT_PUBLIC_APP_URL=https://<tunnel>` in `.dev.vars`. For a stable URL across restarts, set up a **Named Tunnel** under Cloudflare Zero Trust (free tier).
+
+`ngrok http 3000` works identically and is fine if the user already has an account.

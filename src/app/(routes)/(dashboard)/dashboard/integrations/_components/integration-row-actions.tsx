@@ -14,20 +14,39 @@ export function ConnectButton({ platform }: { platform: string }) {
   async function handleClick() {
     setIsPending(true)
     try {
-      const res = await fetch("/api/integrations", {
+      const res = await fetch("/api/integrations/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ platform }),
       })
-      if (res.status === 501) {
-        toast("OAuth flow coming soon", {
-          description: `Connecting ${platform} requires per-platform OAuth, which is on the roadmap.`,
+      if (res.status === 503) {
+        const json = (await res.json().catch(() => null)) as {
+          missing?: string[]
+        } | null
+        const missing = json?.missing ?? []
+        toast("Coming soon", {
+          description:
+            missing.length > 0
+              ? `Set these env vars to enable ${platform}: ${missing.join(", ")}`
+              : `This integration isn't configured yet.`,
         })
-      } else if (!res.ok) {
-        toast.error("Could not start connection")
-      } else {
-        window.dispatchEvent(new Event(UPDATED_EVENT))
+        return
       }
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as {
+          message?: string
+        } | null
+        toast.error("Could not start connection", {
+          description: json?.message,
+        })
+        return
+      }
+      const json = (await res.json().catch(() => null)) as { url?: string } | null
+      if (!json?.url) {
+        toast.error("Provider did not return an authorization URL")
+        return
+      }
+      window.location.href = json.url
     } catch {
       toast.error("Network error")
     } finally {
@@ -65,8 +84,8 @@ export function DisconnectButton({
   async function handleClick() {
     setIsPending(true)
     try {
-      const res = await fetch("/api/integrations", {
-        method: "DELETE",
+      const res = await fetch("/api/integrations/disconnect", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ integrationId }),
       })
@@ -75,7 +94,6 @@ export function DisconnectButton({
         return
       }
       window.dispatchEvent(new Event(UPDATED_EVENT))
-      // Refresh server-rendered list. router.refresh() would be ideal — done with reload to keep this dep-free.
       window.location.reload()
     } catch {
       toast.error("Network error")

@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { eq } from "drizzle-orm"
@@ -7,6 +8,7 @@ import { getAuth } from "@/lib/auth"
 import { INTEGRATIONS } from "@/lib/constants/integrations"
 
 import { DashboardPageHeader } from "../../_common/dashboard-page-header"
+import { CallbackToastBanner } from "./_components/callback-toast-banner"
 import {
   ConnectButton,
   DisconnectButton,
@@ -30,6 +32,9 @@ export default async function IntegrationsPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Suspense fallback={null}>
+        <CallbackToastBanner />
+      </Suspense>
       <DashboardPageHeader
         title="Integrations"
         description="Connect your social media accounts to schedule and publish posts."

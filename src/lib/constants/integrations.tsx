@@ -6,7 +6,6 @@ export enum IntegrationTypeEnum {
   THREADS = "THREADS",
   FACEBOOK = "FACEBOOK",
   LINKEDIN = "LINKEDIN",
-  BLUESKY = "BLUESKY",
   YOUTUBE = "YOUTUBE",
   TIKTOK = "TIKTOK",
 }
@@ -42,12 +41,6 @@ const FacebookIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 )
 
-const BlueskyIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-    <path d="M12 10.8c-1.087-2.114-5.713-6.347-8.96-7.62-5.182-2.036-2.592 5.86-1.503 7.502.827 1.248 3.568 2.68 5.706 2.919-4.832.221-7.234 2.116-4.996 6.084 1.782 3.16 6.068 3.23 9.753.84v-.002c3.684 2.391 7.971 2.32 9.753-.84 2.238-3.968-.164-5.863-4.996-6.084 2.138-.24 4.88-1.671 5.706-2.919 1.089-1.642 3.68-9.538-1.503-7.502-3.247 1.273-7.873 5.506-8.96 7.62z" />
-  </svg>
-)
-
 const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
     <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
@@ -66,7 +59,6 @@ export const INTEGRATION_TYPE_ICONS: Record<IntegrationTypeEnum, React.Component
   [IntegrationTypeEnum.INSTAGRAM]: InstagramIcon,
   [IntegrationTypeEnum.THREADS]:   ThreadsIcon,
   [IntegrationTypeEnum.FACEBOOK]:  FacebookIcon,
-  [IntegrationTypeEnum.BLUESKY]:   BlueskyIcon,
   [IntegrationTypeEnum.YOUTUBE]:   YoutubeIcon,
   [IntegrationTypeEnum.TIKTOK]:    TiktokIcon,
 }
@@ -77,7 +69,6 @@ export const INTEGRATION_TYPE_URLS: Record<IntegrationTypeEnum, string> = {
   [IntegrationTypeEnum.INSTAGRAM]: "https://instagram.com",
   [IntegrationTypeEnum.THREADS]:   "https://threads.com",
   [IntegrationTypeEnum.FACEBOOK]:  "https://facebook.com",
-  [IntegrationTypeEnum.BLUESKY]:   "https://bluesky.com",
   [IntegrationTypeEnum.YOUTUBE]:   "https://youtube.com",
   [IntegrationTypeEnum.TIKTOK]:    "https://tiktok.com",
 }
@@ -88,7 +79,6 @@ export const INTEGRATION_TYPE_LABELS: Record<IntegrationTypeEnum, string> = {
   [IntegrationTypeEnum.INSTAGRAM]: "Instagram",
   [IntegrationTypeEnum.THREADS]:   "Threads",
   [IntegrationTypeEnum.FACEBOOK]:  "Facebook",
-  [IntegrationTypeEnum.BLUESKY]:   "Bluesky",
   [IntegrationTypeEnum.YOUTUBE]:   "YouTube",
   [IntegrationTypeEnum.TIKTOK]:    "TikTok",
 }
@@ -100,7 +90,6 @@ export const INTEGRATION_TYPE_COLORS: Record<IntegrationTypeEnum, string> = {
   [IntegrationTypeEnum.INSTAGRAM]: "#E4405F",
   [IntegrationTypeEnum.THREADS]:   "#000000",
   [IntegrationTypeEnum.FACEBOOK]:  "#1877F2",
-  [IntegrationTypeEnum.BLUESKY]:   "#1285FE",
   [IntegrationTypeEnum.YOUTUBE]:   "#FF0000",
   [IntegrationTypeEnum.TIKTOK]:    "#000000",
 }
@@ -112,7 +101,6 @@ export const INTEGRATION_TYPE_CHAR_LIMITS: Record<IntegrationTypeEnum, number> =
   [IntegrationTypeEnum.INSTAGRAM]: 2200,
   [IntegrationTypeEnum.THREADS]:   500,
   [IntegrationTypeEnum.FACEBOOK]:  63206,
-  [IntegrationTypeEnum.BLUESKY]:   300,
   [IntegrationTypeEnum.YOUTUBE]:   100,
   [IntegrationTypeEnum.TIKTOK]:    100,
 }
@@ -134,7 +122,6 @@ export const INTEGRATIONS: readonly Integration[] = [
   IntegrationTypeEnum.INSTAGRAM,
   IntegrationTypeEnum.THREADS,
   IntegrationTypeEnum.FACEBOOK,
-  IntegrationTypeEnum.BLUESKY,
   IntegrationTypeEnum.YOUTUBE,
   IntegrationTypeEnum.TIKTOK,
 ].map((type) => ({
