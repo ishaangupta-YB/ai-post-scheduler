@@ -126,8 +126,8 @@ const ANIMATION_STEPS = [
     integrations: [IntegrationTypeEnum.TWITTER]
   },
   {
-    prompt: "Draft a LinkedIn announcement for CalmPost launch...",
-    draft: "Staring at a blank screen on Sunday night is the worst way to do social media. \n\nToday, we're launching CalmPost. Capture ideas in a click, let AI draft in your exact tone, and queue multi-channel on autopilot.",
+    prompt: `Draft a LinkedIn announcement for ${APP_NAME} launch...`,
+    draft: `Staring at a blank screen on Sunday night is the worst way to do social media. \n\nToday, we're launching ${APP_NAME}. Capture ideas in a click, let AI draft in your exact tone, and queue multi-channel on autopilot.`,
     integrations: [IntegrationTypeEnum.LINKEDIN]
   },
   {

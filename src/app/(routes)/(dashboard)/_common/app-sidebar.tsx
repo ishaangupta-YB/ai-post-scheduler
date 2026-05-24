@@ -9,6 +9,7 @@ import {
   Monitor,
   Moon,
   Palette,
+  Plug,
   Plus,
   Settings as SettingsIcon,
   Sun,
@@ -71,7 +72,7 @@ type AppSidebarUser = {
 
 export default function AppSidebar({ user }: { user: AppSidebarUser }) {
   const pathname = usePathname()
-  const router = useRouter()
+  const { push, replace, refresh } = useRouter()
   const { theme, setTheme } = useTheme()
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
@@ -104,8 +105,7 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
 
   const initials = user.name
     .split(" ")
-    .map((p) => p[0])
-    .filter(Boolean)
+    .flatMap((p) => (p[0] ? [p[0]] : []))
     .slice(0, 2)
     .join("")
     .toUpperCase()
@@ -115,8 +115,8 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
     await authClient.signOut({
       fetchOptions: {
         onSuccess: () => {
-          router.replace("/")
-          router.refresh()
+          replace("/")
+          refresh()
         },
       },
     })
@@ -134,10 +134,10 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
                 render={<Link href={defaultDashboardPath} />}
                 tooltip={APP_NAME}
               >
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-warning text-warning-foreground shadow-xs">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-warning text-warning-foreground shadow-xs group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!min-w-8">
                   <Leaf className="size-4.5 fill-current" />
                 </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
+                <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                   <span className="truncate font-bold text-foreground text-md">
                     {APP_NAME}
                   </span>
@@ -154,10 +154,10 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
                 <SidebarMenuButton
                   onClick={() => setIsCreatePostOpen(true)}
                   tooltip="New Post"
-                  className="bg-warning text-warning-foreground hover:bg-warning/90 hover:text-warning-foreground active:bg-warning/80 active:text-warning-foreground font-semibold rounded-full justify-center h-10 w-full flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                  className="bg-warning text-warning-foreground hover:bg-warning/90 hover:text-warning-foreground active:bg-warning/80 active:text-warning-foreground font-semibold rounded-full justify-center h-10 w-full flex items-center gap-1.5 shadow-sm transition-all cursor-pointer group-data-[collapsible=icon]:!rounded-md group-data-[collapsible=icon]:!h-8 group-data-[collapsible=icon]:!w-8 group-data-[collapsible=icon]:!p-0"
                 >
                   <Plus className="size-4 stroke-[3px]" />
-                  <span>New Post</span>
+                  <span className="group-data-[collapsible=icon]:hidden">New Post</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -183,34 +183,42 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
           </SidebarGroup>
 
           <SidebarGroup className="mt-3">
-            <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/80 uppercase px-2 mb-1.5">
+            <SidebarGroupLabel className="text-xs font-semibold tracking-wider text-muted-foreground/80 uppercase px-2 mb-1.5 group-data-[collapsible=icon]:hidden">
               Integrations
             </SidebarGroupLabel>
-            <SidebarGroupContent className="px-2">
-              <Link
-                href="/dashboard/integrations"
-                className="group/integrations flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-sidebar-accent/40 px-3 py-2.5 hover:border-border hover:bg-sidebar-accent transition-colors"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="flex -space-x-1.5 shrink-0">
-                    {INTEGRATIONS.slice(0, 4).map((integration) => (
-                      <div
-                        key={integration.type}
-                        className="size-6 rounded-md ring-2 ring-sidebar flex items-center justify-center text-white"
-                        style={{ backgroundColor: integration.brandColor }}
-                      >
-                        <integration.icon className="size-3 fill-current" />
+            <SidebarGroupContent className="px-2 group-data-[collapsible=icon]:px-0">
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/dashboard/integrations" />}
+                    tooltip="Integrations"
+                    className="group/integrations flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-sidebar-accent/40 px-3 py-5 hover:border-border hover:bg-sidebar-accent transition-colors group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:!bg-transparent group-data-[collapsible=icon]:!border-transparent group-data-[collapsible=icon]:justify-center"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 group-data-[collapsible=icon]:hidden">
+                      <div className="flex [&>*:not(:first-child)]:-ml-1.5 shrink-0">
+                        {INTEGRATIONS.slice(0, 4).map((integration) => (
+                          <div
+                            key={integration.type}
+                            className="size-6 rounded-md ring-2 ring-sidebar flex items-center justify-center text-white"
+                            style={{ backgroundColor: integration.brandColor }}
+                          >
+                            <integration.icon className="size-3 fill-current" />
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                  <span className="text-sm font-medium truncate">
-                    Connect
-                  </span>
-                </div>
-                <span className="text-xs font-mono tabular-nums text-muted-foreground group-hover/integrations:text-foreground transition-colors">
-                  {connectedKeys.length}/{INTEGRATIONS.length}
-                </span>
-              </Link>
+                      <span className="text-sm font-medium truncate">
+                        Connect
+                      </span>
+                    </div>
+                    <div className="hidden group-data-[collapsible=icon]:flex items-center justify-center">
+                      <Plug className="size-4" />
+                    </div>
+                    <span className="text-xs font-mono tabular-nums text-muted-foreground group-hover/integrations:text-foreground transition-colors group-data-[collapsible=icon]:hidden">
+                      {connectedKeys.length}/{INTEGRATIONS.length}
+                    </span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
@@ -224,15 +232,15 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
                     <SidebarMenuButton
                       size="lg"
                       tooltip={user.name}
-                      className="data-[state=open]:bg-sidebar-accent"
+                      className="data-[state=open]:bg-sidebar-accent group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!p-0"
                     >
-                      <Avatar className="size-7">
+                      <Avatar className="size-8 rounded-lg group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!min-w-8">
                         {user.image ? (
                           <AvatarImage src={user.image} alt={user.name} />
                         ) : null}
-                        <AvatarFallback>{initials || "?"}</AvatarFallback>
+                        <AvatarFallback className="rounded-lg">{initials || "?"}</AvatarFallback>
                       </Avatar>
-                      <div className="grid flex-1 text-left text-sm leading-tight">
+                      <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                         <span className="truncate font-medium">
                           {user.name}
                         </span>
@@ -240,7 +248,7 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
                           {user.email}
                         </span>
                       </div>
-                      <ChevronsUpDown className="ml-auto size-4 opacity-70" />
+                      <ChevronsUpDown className="ml-auto size-4 opacity-70 group-data-[collapsible=icon]:hidden" />
                     </SidebarMenuButton>
                   }
                 />
@@ -271,19 +279,19 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
                     <DropdownMenuItem
-                      onClick={() => router.push("/dashboard/profile")}
+                      onClick={() => push("/dashboard/profile")}
                     >
                       <UserIcon className="size-4" />
                       <span>Profile</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => router.push("/dashboard/settings")}
+                      onClick={() => push("/dashboard/settings")}
                     >
                       <SettingsIcon className="size-4" />
                       <span>Settings</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => router.push("/dashboard/billing")}
+                      onClick={() => push("/dashboard/billing")}
                     >
                       <CreditCard className="size-4" />
                       <span>Billing</span>
@@ -358,7 +366,7 @@ export default function AppSidebar({ user }: { user: AppSidebarUser }) {
             <Button
               onClick={() => {
                 setIsCreatePostOpen(false)
-                router.push(defaultDashboardPath)
+                push(defaultDashboardPath)
               }}
             >
               Go to Ideas

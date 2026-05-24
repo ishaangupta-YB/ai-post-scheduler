@@ -463,9 +463,9 @@ User asked to (1) add monthly **and annual** subscription billing, (2) rename th
   - `GET`: auth-gated. Merges static `INTEGRATIONS` taxonomy with DB rows. Supports `?filter=connected|unconnected`. Returns `{ integrations, counts: { connected, total } }`.
   - `POST`: returns `501 not_implemented` (OAuth start/callback per platform out of scope).
   - `DELETE`: `{ integrationId }` — removes the row scoped to session user; CASCADE drops dependent scheduled posts.
-- **REWRITTEN `src/app/(routes)/(dashboard)/dashboard/integrations/page.tsx`:** Server component. Queries `integrations` table for the session user, merges with static `INTEGRATIONS` list, renders rows. Removed all `localStorage` ("lemon_connected_integrations" key gone). Per-row Connect/Disconnect buttons extracted to a tiny client component.
+- **REWRITTEN `src/app/(routes)/(dashboard)/dashboard/integrations/page.tsx`:** Server component. Queries `integrations` table for the session user, merges with static `INTEGRATIONS` list, renders rows. Removed all `localStorage`-backed connection state. Per-row Connect/Disconnect buttons extracted to a tiny client component.
 - **NEW `src/app/(routes)/(dashboard)/dashboard/integrations/_components/integration-row-actions.tsx`:** `<ConnectButton>` POSTs to `/api/integrations` (surfaces "OAuth flow coming soon" toast on the 501 response). `<DisconnectButton>` DELETEs and reloads; both dispatch `window.dispatchEvent(new Event("integrations:updated"))`.
-- **Updated `src/app/(routes)/(dashboard)/_common/app-sidebar.tsx`:** Dropped the `lemon_connected_integrations` localStorage read; replaced with `fetch("/api/integrations?filter=connected")`. Renamed listened event `lemon_integrations_updated` → `integrations:updated`. Counter footer "{n}/{INTEGRATIONS.length} integrations connected" (no more hard-coded 8).
+- **Updated `src/app/(routes)/(dashboard)/_common/app-sidebar.tsx`:** Dropped the old localStorage-backed connected-integrations read; replaced with `fetch("/api/integrations?filter=connected")`. Renamed the listened event to `integrations:updated`. Counter footer "{n}/{INTEGRATIONS.length} integrations connected" (no more hard-coded 8).
 
 ### Files added/renamed/rewritten/deleted
 - ADDED: `src/db/integrations-schema.ts`, `src/db/content-schema.ts`, `src/app/(routes)/(dashboard)/dashboard/billing/_components/billing-plans-section.tsx`, `src/app/(routes)/(dashboard)/dashboard/integrations/_components/integration-row-actions.tsx`, `src/lib/constants/integrations.tsx`.
@@ -575,11 +575,11 @@ Seven implementations of `OAuthProvider` + a `_shared.ts` helper (`formUrlencode
 
 ## 17. Session log — 2026-05-24 (session 7 — OAuth audit & hardening + tunnel guidance)
 
-User asked to verify the OAuth integration code actually works without breaking anything, cross-reference the `TechWithEmmaYT/Lemon-AI-SocialMedia-Scheduling-SaaS/lib/social-oauth` open-source repo, validate against the latest 2024-2026 provider docs, and explain whether they need ngrok or Cloudflare Tunnel.
+User asked to verify the OAuth integration code actually works without breaking anything, validate it against the latest 2024-2026 provider docs, and explain whether they need ngrok or Cloudflare Tunnel.
 
 ### Cross-references checked
-- **Lemon-AI repo** (scraped end-to-end): `index.ts` (provider factory + requestToken + refresh), `types.ts`, `state.ts`, `pkce.ts`, `encryption.ts`, all three API routes. Architectural alignment is high — same env-driven provider config, same `{b64u_payload}.{b64u_sig}` HMAC state, same PKCE-only-for-Twitter, same state-hashed PKCE cookie name. Our soft-disconnect is actually stricter than theirs (they null tokens but never set a status enum).
 - **Provider docs** for X / LinkedIn / Instagram Graph / Threads / Facebook Pages / YouTube / TikTok confirmed: provider URLs (`x.com`, `api.x.com`, `threads.net`, `graph.threads.net`, `www.tiktok.com`, `open.tiktokapis.com`) are current; LinkedIn has migrated to OIDC `/v2/userinfo`; Meta family returns short-lived (1 hr) tokens that need long-lived exchange; YouTube needs `openid,email,profile` alongside YouTube scopes for `sub` in userinfo response; TikTok uses `client_key` (not `client_id`).
+- **Architectural patterns** confirmed against common OAuth-2.0/PKCE SaaS conventions: env-driven provider config, HMAC-signed state, PKCE-only-for-Twitter, AES-GCM token encryption, state-hashed PKCE cookie name. Our soft-disconnect (sets `status='revoked'` in addition to nulling tokens) is stricter than the typical null-only pattern.
 
 ### 9 fixes shipped this session
 

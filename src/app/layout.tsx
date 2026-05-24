@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 
 import "./globals.css"
+import { APP_NAME } from "@/lib/constants/app"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,8 +18,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "CalmPost - Social Post Scheduler",
-  description: "A calm, AI-powered social post scheduling app for Twitter, X, and LinkedIn Threads.",
+  title: `${APP_NAME} - AI-powered Social Post Scheduler`,
+  description: `${APP_NAME} is an AI-powered social post scheduler for Twitter, X, and LinkedIn Threads.`,
 }
 
 export default function RootLayout({
