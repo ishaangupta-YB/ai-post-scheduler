@@ -2,44 +2,40 @@ import { headers } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
 import { getDb, integrations } from "@/db"
+import {
+  integrationPlatforms,
+  type IntegrationPlatform,
+} from "@/db/integrations-schema"
 import { getAuth } from "@/lib/auth"
-import { getAppUrl, getOAuthProvider } from "@/lib/oauth"
-import { encryptNullable } from "@/lib/oauth/crypto"
-import { getPkceCookieName } from "@/lib/oauth/pkce"
-import { verifyOAuthState } from "@/lib/oauth/state"
+import { getConnection } from "@/lib/composio/connections"
+import { getAppUrl } from "@/lib/composio/platforms"
 
 const DEFAULT_REDIRECT = "/dashboard/integrations"
 const MAX_RAW_METADATA_BYTES = 4096
 
 // Strict allowlist. Anything else falls back to /dashboard/integrations.
-// Defends against open-redirect even if state.redirectTo gets user-influenced later.
+// Defends against open-redirect even if the platform query param gets
+// user-influenced later.
 function safeRedirectPath(path: string): string {
   if (typeof path !== "string" || path.length === 0) return DEFAULT_REDIRECT
-  if (!path.startsWith("/")) return DEFAULT_REDIRECT          // refuses //evil.com, https://…
-  if (path.startsWith("//")) return DEFAULT_REDIRECT          // protocol-relative
+  if (!path.startsWith("/")) return DEFAULT_REDIRECT
+  if (path.startsWith("//")) return DEFAULT_REDIRECT
   if (path.includes("\\")) return DEFAULT_REDIRECT
   if (path.includes("..")) return DEFAULT_REDIRECT
-  // A colon in the path component would indicate a scheme (javascript:, data:, etc.).
-  // Strip a query string before checking; ? and # are fine.
   const noQuery = path.split(/[?#]/, 1)[0]
   if (noQuery.includes(":")) return DEFAULT_REDIRECT
   if (!path.startsWith("/dashboard/")) return DEFAULT_REDIRECT
   return path
 }
 
-async function redirectTo(
+function redirectTo(
   appUrl: string,
   path: string,
   params: Record<string, string>,
-  clearPkceCookieFor?: string,
-): Promise<NextResponse> {
+): NextResponse {
   const url = new URL(safeRedirectPath(path), appUrl)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
-  const response = NextResponse.redirect(url)
-  if (clearPkceCookieFor) {
-    response.cookies.delete(await getPkceCookieName(clearPkceCookieFor))
-  }
-  return response
+  return NextResponse.redirect(url)
 }
 
 function summarizeError(err: unknown): string {
@@ -48,16 +44,49 @@ function summarizeError(err: unknown): string {
   return "unknown_error"
 }
 
-// Cap stored raw profile data so we don't pile huge provider responses
-// (data: URIs, embedded media) into D1's text-mode JSON column.
+// Bound stored Composio profile data — provider responses can include
+// embedded media URLs or large payloads we don't want in D1's text JSON.
 function capRaw(raw: unknown): unknown {
-  if (!raw) return undefined
+  if (raw == null) return undefined
   try {
     const s = JSON.stringify(raw)
     if (s.length <= MAX_RAW_METADATA_BYTES) return raw
     return { _truncated: true, _bytes: s.length, head: s.slice(0, MAX_RAW_METADATA_BYTES) }
   } catch {
     return { _unserializable: true }
+  }
+}
+
+// Best-effort field extraction from Composio's getConnection() data payload.
+// Provider responses vary; we narrow opportunistically and store the rest
+// inside metadata.raw.
+function extractProfileFields(data: unknown): {
+  handle: string | null
+  profileImage: string | null
+  profileUrl: string | null
+  providerAccountId: string | null
+} {
+  if (!data || typeof data !== "object") {
+    return {
+      handle: null,
+      profileImage: null,
+      profileUrl: null,
+      providerAccountId: null,
+    }
+  }
+  const d = data as Record<string, unknown>
+  const pickStr = (...keys: string[]): string | null => {
+    for (const k of keys) {
+      const v = d[k]
+      if (typeof v === "string" && v.length > 0) return v
+    }
+    return null
+  }
+  return {
+    handle: pickStr("username", "handle", "screen_name", "name", "display_name"),
+    profileImage: pickStr("profile_image_url", "profile_image", "picture", "avatar_url"),
+    profileUrl: pickStr("profile_url", "url", "html_url"),
+    providerAccountId: pickStr("id", "user_id", "sub", "open_id", "provider_account_id"),
   }
 }
 
@@ -73,113 +102,85 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url)
-  const code = searchParams.get("code")
-  const stateParam = searchParams.get("state")
-  const providerError = searchParams.get("error")
-  const providerErrorDescription = searchParams.get("error_description")
+  const status = searchParams.get("status")
+  const connectedAccountId = searchParams.get("connectedAccountId")
+  const platformParam = searchParams.get("platform")
+  const errorMessage = searchParams.get("error_message") ?? searchParams.get("error")
 
-  if (!stateParam) {
+  // Validate platform from our round-tripped query param.
+  const platform =
+    platformParam &&
+    (integrationPlatforms as readonly string[]).includes(platformParam)
+      ? (platformParam as IntegrationPlatform)
+      : null
+
+  if (!platform) {
     return redirectTo(appUrl, DEFAULT_REDIRECT, {
       connected: "false",
-      error: "missing_state",
+      error: "invalid_platform",
     })
-  }
-
-  let state
-  try {
-    state = await verifyOAuthState(stateParam)
-  } catch (err) {
-    console.error("[oauth/callback] state verify failed", summarizeError(err))
-    return redirectTo(
-      appUrl,
-      DEFAULT_REDIRECT,
-      { connected: "false", error: "invalid_state" },
-      stateParam,
-    )
-  }
-
-  if (providerError) {
-    console.error(
-      `[oauth/callback] provider returned error platform=${state.platform} userId=${state.userId} error=${providerError} desc=${providerErrorDescription ?? ""}`,
-    )
-    const params: Record<string, string> = {
-      connected: "false",
-      error: providerError,
-    }
-    if (providerErrorDescription) {
-      params.details = providerErrorDescription.slice(0, 200)
-    }
-    return redirectTo(appUrl, state.redirectTo, params, stateParam)
-  }
-
-  if (!code) {
-    return redirectTo(
-      appUrl,
-      state.redirectTo,
-      { connected: "false", error: "missing_code" },
-      stateParam,
-    )
   }
 
   const session = await getAuth().api.getSession({ headers: await headers() })
-  if (!session || session.user.id !== state.userId) {
-    return redirectTo(
-      appUrl,
-      state.redirectTo,
-      { connected: "false", error: "unauthorized" },
-      stateParam,
-    )
+  if (!session) {
+    return redirectTo(appUrl, DEFAULT_REDIRECT, {
+      connected: "false",
+      error: "unauthorized",
+      platform,
+    })
   }
 
-  const provider = getOAuthProvider(state.platform)
-  const redirectUri = `${appUrl}/api/integrations/callback`
+  if (status !== "success") {
+    return redirectTo(appUrl, DEFAULT_REDIRECT, {
+      connected: "false",
+      error: status ?? "callback_failed",
+      ...(errorMessage ? { details: errorMessage.slice(0, 200) } : {}),
+      platform,
+    })
+  }
 
-  let codeVerifier: string | undefined
-  if (provider.usesPkce) {
-    const cookieName = await getPkceCookieName(stateParam)
-    codeVerifier = request.cookies.get(cookieName)?.value
-    if (!codeVerifier) {
-      return redirectTo(
-        appUrl,
-        state.redirectTo,
-        { connected: "false", error: "missing_pkce" },
-        stateParam,
-      )
-    }
+  if (!connectedAccountId) {
+    return redirectTo(appUrl, DEFAULT_REDIRECT, {
+      connected: "false",
+      error: "missing_connected_account_id",
+      platform,
+    })
   }
 
   try {
-    const token = await provider.exchangeCodeForToken({
-      code,
-      redirectUri,
-      codeVerifier,
-    })
-    const profile = await provider.getProfile({ accessToken: token.accessToken })
-
-    const encAccess = await encryptNullable(token.accessToken)
-    const encRefresh = await encryptNullable(token.refreshToken)
-    const now = new Date()
-
-    const cappedRaw = capRaw(profile.raw)
+    // Pull profile data so the row shows a handle / avatar; non-fatal if it
+    // 404s — Composio sometimes needs a beat to finalize the connection, so
+    // we proceed with what we have and let the publisher backfill later.
+    const conn = await getConnection(connectedAccountId)
+    const { handle, profileImage, profileUrl, providerAccountId } =
+      extractProfileFields(conn?.data)
+    const cappedRaw = capRaw(conn?.data)
     const metadata: Record<string, unknown> = {
-      providerAccountId: profile.providerAccountId,
+      composio: {
+        connectedAccountId,
+        status: conn?.status ?? "ACTIVE",
+        toolkitSlug: conn?.toolkitSlug,
+      },
+      ...(providerAccountId ? { providerAccountId } : {}),
       ...(cappedRaw ? { raw: cappedRaw } : {}),
     }
 
+    const now = new Date()
     const db = getDb()
     await db
       .insert(integrations)
       .values({
         id: crypto.randomUUID(),
-        userId: state.userId,
-        platform: state.platform,
-        handle: profile.handle ?? null,
-        profileImage: profile.profileImage ?? null,
-        profileUrl: profile.profileUrl ?? null,
-        accessToken: encAccess,
-        refreshToken: encRefresh,
-        tokenExpiresAt: token.expiresAt ?? null,
-        scope: token.scope ?? null,
+        userId: session.user.id,
+        platform,
+        handle,
+        profileImage,
+        profileUrl,
+        accessToken: null,
+        refreshToken: null,
+        tokenExpiresAt: null,
+        scope: null,
+        composioConnectedAccountId: connectedAccountId,
         metadata,
         status: "active",
         connectedAt: now,
@@ -188,13 +189,14 @@ export async function GET(request: NextRequest) {
       .onConflictDoUpdate({
         target: [integrations.userId, integrations.platform],
         set: {
-          handle: profile.handle ?? null,
-          profileImage: profile.profileImage ?? null,
-          profileUrl: profile.profileUrl ?? null,
-          accessToken: encAccess,
-          refreshToken: encRefresh,
-          tokenExpiresAt: token.expiresAt ?? null,
-          scope: token.scope ?? null,
+          handle,
+          profileImage,
+          profileUrl,
+          accessToken: null,
+          refreshToken: null,
+          tokenExpiresAt: null,
+          scope: null,
+          composioConnectedAccountId: connectedAccountId,
           metadata,
           status: "active",
           connectedAt: now,
@@ -203,22 +205,20 @@ export async function GET(request: NextRequest) {
         },
       })
 
-    return redirectTo(
-      appUrl,
-      state.redirectTo,
-      { connected: "true", platform: state.platform },
-      stateParam,
-    )
+    return redirectTo(appUrl, DEFAULT_REDIRECT, {
+      connected: "true",
+      platform,
+    })
   } catch (err) {
     const message = summarizeError(err)
     console.error(
-      `[oauth/callback] exchange failed platform=${state.platform} userId=${state.userId} message=${message}`,
+      `[composio/callback] upsert failed platform=${platform} userId=${session.user.id} message=${message}`,
     )
-    return redirectTo(
-      appUrl,
-      state.redirectTo,
-      { connected: "false", error: "callback_failed", details: message },
-      stateParam,
-    )
+    return redirectTo(appUrl, DEFAULT_REDIRECT, {
+      connected: "false",
+      error: "callback_failed",
+      details: message,
+      platform,
+    })
   }
 }

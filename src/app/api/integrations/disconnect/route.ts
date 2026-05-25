@@ -5,10 +5,12 @@ import { NextResponse } from "next/server"
 import { getDb, integrations } from "@/db"
 import { integrationPlatforms } from "@/db/integrations-schema"
 import { getAuth } from "@/lib/auth"
+import { deleteConnection } from "@/lib/composio/connections"
 
-// Soft disconnect: clear tokens, mark status='revoked'. Keeps the row so
-// reconnect upserts back to active and the integration history is preserved.
-// Scheduled posts referencing this integration are NOT cascade-deleted.
+// Soft disconnect: clear our stored Composio link and mark status='revoked'.
+// Also tells Composio to delete the connected account so it stops counting
+// against the user's quota and can't be silently re-attached. We swallow
+// Composio errors so the local revoke still succeeds if the SDK is down.
 export async function POST(request: Request) {
   const session = await getAuth().api.getSession({ headers: await headers() })
   if (!session) {
@@ -27,13 +29,11 @@ export async function POST(request: Request) {
 
   const db = getDb()
 
-  // Defense-in-depth: confirm the row is ours AND points at a known platform
-  // before mutating. The user-scoped UPDATE alone already prevents auth bypass,
-  // but a stale or malformed row could otherwise be silently no-op'd.
   const existing = await db
     .select({
       id: integrations.id,
       platform: integrations.platform,
+      composioConnectedAccountId: integrations.composioConnectedAccountId,
     })
     .from(integrations)
     .where(
@@ -49,9 +49,24 @@ export async function POST(request: Request) {
   }
   if (!(integrationPlatforms as readonly string[]).includes(existing[0].platform)) {
     return NextResponse.json(
-      { error: "invalid_platform", message: "Stored platform is not in the supported set" },
+      {
+        error: "invalid_platform",
+        message: "Stored platform is not in the supported set",
+      },
       { status: 409 },
     )
+  }
+
+  if (existing[0].composioConnectedAccountId) {
+    try {
+      await deleteConnection(existing[0].composioConnectedAccountId)
+    } catch (err) {
+      // Best-effort — log and continue. Local revoke still happens.
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(
+        `[composio/disconnect] delete failed integrationId=${body.integrationId} userId=${session.user.id} message=${message}`,
+      )
+    }
   }
 
   const updated = await db
@@ -60,6 +75,7 @@ export async function POST(request: Request) {
       accessToken: null,
       refreshToken: null,
       tokenExpiresAt: null,
+      composioConnectedAccountId: null,
       status: "revoked",
       updatedAt: new Date(),
     })

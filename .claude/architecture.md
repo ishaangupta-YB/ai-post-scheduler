@@ -56,13 +56,12 @@ src/
 │   │   ├── credits.ts                     grantTopupCredits, spendCredits, getCreditState, …
 │   │   ├── packs.ts                       PLANS + TOPUP_PACKS catalog
 │   │   └── dodo.ts                        REST client + webhook signature verification
-│   ├── oauth/                           → Per-platform OAuth (see flow below)
-│   │   ├── index.ts                       factory + getProviderConfig + getAppUrl
-│   │   ├── types.ts                       OAuthProvider interface, errors
-│   │   ├── state.ts                       HMAC-signed state token (BETTER_AUTH_SECRET)
-│   │   ├── pkce.ts                        PKCE pair + cookie name helper
-│   │   ├── crypto.ts                      AES-GCM-256 encrypt/decrypt (INTEGRATION_TOKEN_KEK)
-│   │   └── providers/                     twitter, linkedin, instagram, threads, facebook, youtube, tiktok
+│   ├── composio/                        → ACTIVE OAuth + tool execution (see flow below)
+│   │   ├── client.ts                      getComposio() — singleton with COMPOSIO_API_KEY from getCloudflareContext().env
+│   │   ├── platforms.ts                   COMPOSIO_PLATFORMS map (toolkit slug, auth-config env var, enabled) + getAuthConfigId + getAppUrl
+│   │   ├── connections.ts                 startConnection / getConnection / deleteConnection
+│   │   └── tools.ts                       executeIntegrationTool — direct execution, no LLM
+│   ├── oauth/                           → LEGACY — entire library is commented-out (see "Legacy OAuth" below)
 │   └── constants/integrations.tsx       → IntegrationTypeEnum + brand metadata (icons, labels, char limits, colors)
 │
 ├── components/                          → 55 shadcn primitives + theme provider/toggle
@@ -117,84 +116,111 @@ Concurrency: `spendCredits` uses optimistic locking — `UPDATE users SET balanc
 
 Critical: `planPeriodEnd` is our **monthly refresh anchor**, NOT the Dodo billing-cycle end. Annual subscribers still get monthly credit resets (planPeriodEnd advances +30d on each payment).
 
-## Integrations OAuth flow
+## Integrations flow (Composio-backed)
+
+OAuth + token storage + refresh are all delegated to [Composio](https://docs.composio.dev) via `@composio/core`. We supply one `COMPOSIO_API_KEY` plus one auth-config id per platform (created on the Composio dashboard) and store only the `connectedAccountId` Composio hands back.
 
 ```
    ┌──────────┐                  ┌─────────────────────────┐
    │ Connect  │ ───POST {platform} ─→ POST /api/integrations/connect
    └──────────┘                     │
-                                    │ getOAuthProvider(p) — 503 if env missing
-                                    │ createOAuthState(HMAC over BETTER_AUTH_SECRET, 10-min TTL)
-                                    │ if PKCE: createPkcePair + Set-Cookie bs_pkce_<hash(state)>
+                                    │ COMPOSIO_PLATFORMS[platform].enabled? — 503 platform_disabled if not (TWITTER)
+                                    │ getAuthConfigId(platform) — 503 not_configured if env missing
+                                    │ composio.connectedAccounts.link(userId, authConfigId,
+                                    │   { callbackUrl: `${appUrl}/api/integrations/callback?platform=…` })
                                     ↓
-                                    returns { url: provider authorization URL }
+                                    returns { url: connectionRequest.redirectUrl }
                                     ↓
         browser → window.location.href = url
                                     ↓
-                              Provider (Twitter / LinkedIn / IG / etc.)
+                              Composio-hosted auth flow (handles provider OAuth)
                                     ↓
                                     user approves
                                     ↓
-                              GET /api/integrations/callback?code=…&state=…
+                              GET /api/integrations/callback
+                                    ?status=success
+                                    &connectedAccountId=<id>
+                                    &platform=<round-tripped>
                                     │
-                                    │ verifyOAuthState (HMAC, exp check, platform whitelist)
-                                    │ session.user.id === state.userId
-                                    │ if PKCE: read verifier cookie keyed by getPkceCookieName(state)
-                                    │ provider.exchangeCodeForToken
-                                    │ provider.getProfile
-                                    │ AES-GCM encrypt access_token + refresh_token
+                                    │ session.user.id present
+                                    │ status === "success"
+                                    │ getConnection(connectedAccountId) — pulls handle/profile_image/etc. (best-effort)
                                     │ db.insert(integrations).onConflictDoUpdate([userId, platform])
+                                    │   { composioConnectedAccountId, handle, profileImage, profileUrl, metadata, status:'active' }
                                     ↓
                               302 /dashboard/integrations?connected=true&platform=…
                               <CallbackToastBanner /> reads params → toast + strips query
 ```
 
-### Disconnect (soft)
+The legacy access_token / refresh_token / token_expires_at / scope columns are kept on the `integrations` table for migration continuity but are always written as null — Composio holds the actual tokens server-side.
+
+### Direct tool execution
+
+`src/lib/composio/tools.ts` exports `executeIntegrationTool({ userId, toolSlug, arguments, version? })`. It wraps `composio.tools.execute()` directly — no LLM, no agent framework — and normalizes the response into `{ ok, data, error, elapsedMs, toolSlug }`. This is what the future publisher daemon will sit on top of; for now it's exercised via `POST /api/integrations/execute`.
+
+```ts
+// Caller is responsible for picking the right slug (verify via composio.tools.get()
+// or the CLI — never invent slugs). Pin `version` in production for schema stability.
+const result = await executeIntegrationTool({
+  userId: session.user.id,
+  toolSlug: "<VERIFIED_TOOL_SLUG>",
+  arguments: { /* tool-specific */ },
+  // version: "20251201_00",
+})
+```
+
+### Disconnect (soft, with Composio cleanup)
 ```
 POST /api/integrations/disconnect { integrationId }
-  → UPDATE integrations SET access_token=null, refresh_token=null, status='revoked'
-  WHERE id=? AND user_id=?
+  → SELECT row, verify platform is in the supported enum
+  → if row.composioConnectedAccountId:
+      composio.connectedAccounts.delete(id)   (best-effort — log-and-continue)
+  → UPDATE integrations
+      SET access_token=null, refresh_token=null, token_expires_at=null,
+          composio_connected_account_id=null, status='revoked'
+      WHERE id=? AND user_id=?
 ```
 The row is preserved (history, audit). Scheduled posts referencing it are NOT cascade-deleted — they'll fail at publish time if the integration is still revoked then.
 
 ### Security
 
-- **State**: HMAC-SHA256 with `BETTER_AUTH_SECRET`. 10-minute TTL. Random 16-byte nonce. Constant-time signature comparison. State token must split into exactly 2 segments; malformed/oversegmented values rejected.
-- **PKCE**: S256 challenge. Verifier in HTTP-only, SameSite=Lax cookie, name derived from `sha256(state)`. Required for Twitter (X); optional/unused for others.
-- **Tokens at rest**: AES-GCM-256 with `INTEGRATION_TOKEN_KEK` (32 random bytes, base64). IV is random per-encryption, prepended as `${b64u(iv)}.${b64u(ct)}`. Rotating the KEK invalidates all stored tokens.
-- **Cross-account guard**: callback verifies `session.user.id === state.userId` — refuses to attach a token granted to a different account than the one that initiated the flow.
-- **Open-redirect defense**: callback's `safeRedirectPath()` allows only `/dashboard/*` paths with no `..`, `\\`, `:`, or `//` prefix. Anything else (including a tampered `state.redirectTo`) falls back to `/dashboard/integrations`.
-- **Stored metadata bounding**: `profile.raw` is JSON-bounded to 4 KB before persisting (wraps oversized payloads in `{ _truncated: true, _bytes, head }`).
+- **Composio handles the heavy lifting**: OAuth state/PKCE, code exchange, token refresh, encryption at rest — all server-side on their end. We never see or store provider access tokens.
+- **Workers runtime**: `getComposio()` passes `apiKey` explicitly from `getCloudflareContext().env` because Workers don't expose `process.env` (the SDK's default).
+- **Cross-account guard**: callback verifies `getAuth().api.getSession()` returns a user before upserting. Composio's `link()` was scoped by `userId` at start, so the connectedAccountId is bound to that user.
+- **Open-redirect defense**: callback's `safeRedirectPath()` allows only `/dashboard/*` paths with no `..`, `\\`, `:`, or `//` prefix. (Currently we always redirect to `/dashboard/integrations`; the guard is defense-in-depth in case we later make the redirect parameterized.)
+- **Stored metadata bounding**: profile data from `composio.connectedAccounts.get(id)` is JSON-bounded to 4 KB before persisting (wraps oversized payloads in `{ _truncated: true, _bytes, head }`).
 - **Disconnect**: SELECT-then-UPDATE pattern. The SELECT checks `(id, user_id)` AND verifies the row's `platform` is in the supported enum before mutating. The user-scoping alone already prevents auth bypass; the platform check is defense-in-depth.
-- **Misconfiguration**: missing env vars throw `ProviderNotConfiguredError` → 503 with `missing: ["TWITTER_CLIENT_ID", …]`. UI toast surfaces the env-var list verbatim.
+- **Misconfiguration**: missing `COMPOSIO_API_KEY` or `COMPOSIO_AUTH_CONFIG_<PLATFORM>` throws `ComposioNotConfiguredError` → 503 with `missing: ["COMPOSIO_AUTH_CONFIG_LINKEDIN", …]`. UI toast surfaces the env-var list verbatim.
 
 ### Token refresh
 
-`src/lib/oauth/refresh.ts` exposes `refreshIntegrationTokens(integrationId, userId)` — decrypts the stored refresh token, calls `provider.refreshToken`, re-encrypts, and writes back via a scoped UPDATE. Falls back to the previous refresh token if the provider's response omits one (LinkedIn/Google rotate, Twitter sometimes rotates).
+Handled entirely by Composio server-side — we never see the tokens. Composio refreshes them lazily on `tools.execute()`. There is no token-refresh code on our side anymore; the old `src/lib/oauth/refresh.ts` is commented out and obsolete.
 
-Supported providers (have OAuth 2.0 `refresh_token` grant):
-- **Twitter** (with `offline.access` scope)
-- **LinkedIn**
-- **YouTube** (with `access_type=offline&prompt=consent`)
-- **TikTok**
+### Twitter / X status
 
-Not supported (no `refresh_token` grant; use long-lived-token exchange instead):
-- **Facebook**, **Instagram**, **Threads** — Meta family. Their access tokens are short-lived (~1 hour) from the auth-code exchange; we should be exchanging them for 60-day long-lived tokens before storing. Marked as TODO in the provider files. Implement before the publisher daemon ships.
-
-The `refresh.ts` helper throws `IntegrationNotRefreshableError` if a caller tries to refresh a Meta provider.
+`COMPOSIO_PLATFORMS.TWITTER.enabled = false` in `src/lib/composio/platforms.ts`. The connect button returns `503 platform_disabled` → "Coming soon" toast in the UI. Re-enable after deciding between Composio-managed Twitter auth and BYO X Developer credentials.
 
 ### Adding a new platform
-1. Add the enum value to `IntegrationTypeEnum` and `integrationPlatforms`; regenerate migration if no prod data, else write an ALTER.
+1. Add the enum value to `IntegrationTypeEnum` (in `src/lib/constants/integrations.tsx`) and to `integrationPlatforms` (in `src/db/integrations-schema.ts`); regenerate the migration if no prod data, else write an ALTER.
 2. Add a brand icon + the 4 metadata records in `src/lib/constants/integrations.tsx`.
-3. Implement `src/lib/oauth/providers/<name>.ts` exporting an `OAuthProvider`.
-4. Wire it into `getOAuthProvider` (and `ENV_PREFIX` if non-obvious) in `src/lib/oauth/index.ts`.
-5. Add `<NAME>_CLIENT_ID/SECRET/AUTH_URL/TOKEN_URL/PROFILE_URL/SCOPES` to `.dev.vars.example` and `env-extra.d.ts`.
+3. Add an entry to `COMPOSIO_PLATFORMS` in `src/lib/composio/platforms.ts` with the Composio toolkit slug (verify via `composio search` or `composio.toolkits.get(slug)` — do not invent slugs) and the auth-config env-var name.
+4. Add the matching `COMPOSIO_AUTH_CONFIG_<NAME>?: string` field to `src/env-extra.d.ts` and a setup-line to `.dev.vars.example`.
+5. Create the auth config on the Composio dashboard, copy the `ac_…` ID into `.dev.vars`.
 
-## Local development with OAuth providers
+### Legacy OAuth
 
-Most providers require a public **HTTPS** redirect URI even in development — `http://localhost` is rejected by Twitter, LinkedIn, all of Meta (Facebook / Instagram / Threads), and TikTok. Only Google (YouTube) allows `http://localhost:<port>`.
+`src/lib/oauth/**/*.ts` (14 files: client/state/pkce/types/index/refresh + 7 per-provider modules + `_shared.ts`) is the **previous** hand-rolled OAuth stack. Each file is now wrapped in a `LEGACY — DO NOT TOUCH` banner with its body block-commented; only `export {}` is active. The hand-rolled HMAC state, PKCE, AES-GCM token encryption, per-provider exchange, and token refresh are all obsolete because Composio manages OAuth + tokens server-side. **Future agents: do not re-enable or import from these files.**
 
-To test live OAuth flows on a dev machine, expose the local dev server via a tunnel.
+The legacy `*_CLIENT_ID / *_CLIENT_SECRET / *_AUTH_URL / *_TOKEN_URL / *_PROFILE_URL / *_SCOPES` per-provider env vars and `INTEGRATION_TOKEN_KEK` remain declared optional in `src/env-extra.d.ts` so existing `.dev.vars` files still typecheck, but nothing in the code reads them.
+
+## Local development with Composio
+
+Composio's hosted auth pages handle provider redirect URIs for you — you don't need to register `http://localhost:3000/...` with each individual provider portal. The browser flow goes:
+- `<your app>` → `<composio>` (provider sign-in) → `<your app>/api/integrations/callback?status=success&...`
+
+For Composio's redirect back to your app to work in development, set `NEXT_PUBLIC_APP_URL=http://localhost:3000` in `.dev.vars`. Composio's `callbackUrl` setting accepts `http://localhost` for dev — no tunnel is required for the basic flow.
+
+A tunnel (Cloudflare Tunnel, ngrok) is still useful for testing webhooks (Dodo billing, future Composio triggers) since those need a publicly reachable URL.
 
 **Recommended: Cloudflare Tunnel** (you're already on Cloudflare):
 ```bash

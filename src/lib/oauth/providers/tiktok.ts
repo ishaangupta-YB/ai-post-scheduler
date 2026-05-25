@@ -1,3 +1,26 @@
+/**
+ * ============================================================================
+ * LEGACY — DO NOT TOUCH
+ * ============================================================================
+ * This file is part of the hand-rolled per-platform OAuth system that was
+ * REPLACED by Composio in session 8 (2026-05-25). It is kept (commented out)
+ * for historical reference only.
+ *
+ * Active OAuth + tool execution now lives in:
+ *   src/lib/composio/        — SDK client, platform map, connection wrappers
+ *   src/lib/composio/tools.ts — direct tool execution (no LLM)
+ *   src/app/api/integrations/{connect,callback,disconnect}/route.ts
+ *
+ * Future agents: DO NOT re-enable, edit, or import from this file. The
+ * primitives here (HMAC state, PKCE, AES-GCM token encryption, per-provider
+ * exchange code, token refresh) are obsolete because Composio manages OAuth
+ * tokens server-side. If you need any of these again, build fresh — don't
+ * resurrect this code.
+ * ============================================================================
+ */
+
+/* eslint-disable */
+/*
 import { getProviderConfig } from "../index"
 import type {
   AuthorizationUrlArgs,
@@ -90,3 +113,6 @@ export const tiktokProvider: OAuthProvider = {
     }
   },
 }
+*/
+
+export {}

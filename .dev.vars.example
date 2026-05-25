@@ -40,73 +40,94 @@ DODO_TOPUP_500=
 
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-# Twitter / X — https://developer.x.com
-TWITTER_CLIENT_ID=
-TWITTER_CLIENT_SECRET=
-TWITTER_AUTH_URL=https://x.com/i/oauth2/authorize
-TWITTER_TOKEN_URL=https://api.x.com/2/oauth2/token
-TWITTER_PROFILE_URL=https://api.x.com/2/users/me?user.fields=profile_image_url,username
-TWITTER_SCOPES=tweet.read,users.read,tweet.write,offline.access
+# ============================================================================
+# Composio — https://platform.composio.dev   (ACTIVE — used by src/lib/composio/*)
+# ============================================================================
+# 1. Sign in, create a project, copy the project API key from
+#    Project Settings → API Keys. Project keys are shaped like `comp_…`.
+COMPOSIO_API_KEY=
+#
+# 2. For each platform below, create an Auth Config on the Composio dashboard
+#    (Auth Configs → New). Pick "use_composio_managed_auth" for the simplest
+#    setup, or "use_custom_auth" if you want to bring your own OAuth client.
+#    Copy the resulting `ac_…` ID into the matching var below. Leaving any of
+#    them blank just disables that platform in /dashboard/integrations (503).
+COMPOSIO_AUTH_CONFIG_LINKEDIN=
+COMPOSIO_AUTH_CONFIG_INSTAGRAM=
+COMPOSIO_AUTH_CONFIG_THREADS=
+COMPOSIO_AUTH_CONFIG_FACEBOOK=
+COMPOSIO_AUTH_CONFIG_YOUTUBE=
+COMPOSIO_AUTH_CONFIG_TIKTOK=
+# Twitter/X via Composio is deferred — the UI shows "Coming soon" until we
+# decide between Composio-managed auth and BYO Twitter Developer credentials.
 
-# LinkedIn — https://www.linkedin.com/developers
-LINKEDIN_CLIENT_ID=
-LINKEDIN_CLIENT_SECRET=
-LINKEDIN_AUTH_URL=https://www.linkedin.com/oauth/v2/authorization
-LINKEDIN_TOKEN_URL=https://www.linkedin.com/oauth/v2/accessToken
-LINKEDIN_PROFILE_URL=https://api.linkedin.com/v2/userinfo
-LINKEDIN_SCOPES=openid,profile,w_member_social
+# ============================================================================
+# LEGACY — hand-rolled OAuth env vars (superseded by Composio above).
+# ----------------------------------------------------------------------------
+# These were read by src/lib/oauth/* before the migration. The library is now
+# commented out and nothing in the code reads these. They're kept here only
+# so existing local .dev.vars files don't break on rename; do NOT fill them
+# in for new setups. Future cleanup pass: drop this block entirely.
+# ============================================================================
 
-# Threads — https://developers.facebook.com/docs/threads
-THREADS_CLIENT_ID=
-THREADS_CLIENT_SECRET=
-THREADS_AUTH_URL=
-THREADS_TOKEN_URL=
-THREADS_PROFILE_URL=
-THREADS_SCOPES=
-
-# Instagram — https://developers.facebook.com/docs/instagram-platform
-# Instagram Business goes through Facebook Login + Graph API. The user must own
-# a Facebook Page with a linked Instagram Business or Creator account.
-INSTAGRAM_CLIENT_ID=
-INSTAGRAM_CLIENT_SECRET=
-INSTAGRAM_AUTH_URL=https://www.facebook.com/v18.0/dialog/oauth
-INSTAGRAM_TOKEN_URL=https://graph.facebook.com/v18.0/oauth/access_token
-INSTAGRAM_PROFILE_URL=https://graph.facebook.com/v18.0/me/accounts
-INSTAGRAM_SCOPES=instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement
-
-# Threads — https://developers.facebook.com/docs/threads
-THREADS_CLIENT_ID=
-THREADS_CLIENT_SECRET=
-THREADS_AUTH_URL=https://threads.net/oauth/authorize
-THREADS_TOKEN_URL=https://graph.threads.net/oauth/access_token
-THREADS_PROFILE_URL=https://graph.threads.net/v1.0/me
-THREADS_SCOPES=threads_basic,threads_content_publish
-
-# Facebook Pages — https://developers.facebook.com/docs/pages-api
-FACEBOOK_CLIENT_ID=
-FACEBOOK_CLIENT_SECRET=
-FACEBOOK_AUTH_URL=https://www.facebook.com/v18.0/dialog/oauth
-FACEBOOK_TOKEN_URL=https://graph.facebook.com/v18.0/oauth/access_token
-FACEBOOK_PROFILE_URL=https://graph.facebook.com/v18.0/me
-FACEBOOK_SCOPES=pages_show_list,pages_manage_posts,pages_read_engagement
-
-# YouTube — Google OAuth (separate Cloud OAuth client from the sign-in Google one)
-YOUTUBE_CLIENT_ID=
-YOUTUBE_CLIENT_SECRET=
-YOUTUBE_AUTH_URL=https://accounts.google.com/o/oauth2/v2/auth
-YOUTUBE_TOKEN_URL=https://oauth2.googleapis.com/token
-YOUTUBE_PROFILE_URL=https://www.googleapis.com/oauth2/v3/userinfo
-YOUTUBE_SCOPES=https://www.googleapis.com/auth/youtube.upload,https://www.googleapis.com/auth/youtube.readonly,openid,email,profile
-
-# TikTok — https://developers.tiktok.com/doc/login-kit-web
-TIKTOK_CLIENT_ID=
-TIKTOK_CLIENT_SECRET=
-TIKTOK_AUTH_URL=https://www.tiktok.com/v2/auth/authorize/
-TIKTOK_TOKEN_URL=https://open.tiktokapis.com/v2/oauth/token/
-TIKTOK_PROFILE_URL=https://open.tiktokapis.com/v2/user/info/
-TIKTOK_SCOPES=user.info.basic,video.publish,video.upload
-
-# Encryption KEK for OAuth tokens at rest (AES-GCM-256). 32 bytes, base64.
-# Generate with:  openssl rand -base64 32
-# Rotating this invalidates all stored tokens — users will need to reconnect.
-INTEGRATION_TOKEN_KEK=
+# # Twitter / X — https://developer.x.com
+# TWITTER_CLIENT_ID=
+# TWITTER_CLIENT_SECRET=
+# TWITTER_AUTH_URL=https://x.com/i/oauth2/authorize
+# TWITTER_TOKEN_URL=https://api.x.com/2/oauth2/token
+# TWITTER_PROFILE_URL=https://api.x.com/2/users/me?user.fields=profile_image_url,username
+# TWITTER_SCOPES=tweet.read,users.read,tweet.write,offline.access
+#
+# # LinkedIn — https://www.linkedin.com/developers
+# LINKEDIN_CLIENT_ID=
+# LINKEDIN_CLIENT_SECRET=
+# LINKEDIN_AUTH_URL=https://www.linkedin.com/oauth/v2/authorization
+# LINKEDIN_TOKEN_URL=https://www.linkedin.com/oauth/v2/accessToken
+# LINKEDIN_PROFILE_URL=https://api.linkedin.com/v2/userinfo
+# LINKEDIN_SCOPES=openid,profile,w_member_social
+#
+# # Threads — https://developers.facebook.com/docs/threads
+# THREADS_CLIENT_ID=
+# THREADS_CLIENT_SECRET=
+# THREADS_AUTH_URL=https://threads.net/oauth/authorize
+# THREADS_TOKEN_URL=https://graph.threads.net/oauth/access_token
+# THREADS_PROFILE_URL=https://graph.threads.net/v1.0/me
+# THREADS_SCOPES=threads_basic,threads_content_publish
+#
+# # Instagram — https://developers.facebook.com/docs/instagram-platform
+# # Instagram Business goes through Facebook Login + Graph API. The user must
+# # own a Facebook Page with a linked Instagram Business or Creator account.
+# INSTAGRAM_CLIENT_ID=
+# INSTAGRAM_CLIENT_SECRET=
+# INSTAGRAM_AUTH_URL=https://www.facebook.com/v18.0/dialog/oauth
+# INSTAGRAM_TOKEN_URL=https://graph.facebook.com/v18.0/oauth/access_token
+# INSTAGRAM_PROFILE_URL=https://graph.facebook.com/v18.0/me/accounts
+# INSTAGRAM_SCOPES=instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement
+#
+# # Facebook Pages — https://developers.facebook.com/docs/pages-api
+# FACEBOOK_CLIENT_ID=
+# FACEBOOK_CLIENT_SECRET=
+# FACEBOOK_AUTH_URL=https://www.facebook.com/v18.0/dialog/oauth
+# FACEBOOK_TOKEN_URL=https://graph.facebook.com/v18.0/oauth/access_token
+# FACEBOOK_PROFILE_URL=https://graph.facebook.com/v18.0/me
+# FACEBOOK_SCOPES=pages_show_list,pages_manage_posts,pages_read_engagement
+#
+# # YouTube — Google OAuth (separate Cloud OAuth client from the sign-in Google one)
+# YOUTUBE_CLIENT_ID=
+# YOUTUBE_CLIENT_SECRET=
+# YOUTUBE_AUTH_URL=https://accounts.google.com/o/oauth2/v2/auth
+# YOUTUBE_TOKEN_URL=https://oauth2.googleapis.com/token
+# YOUTUBE_PROFILE_URL=https://www.googleapis.com/oauth2/v3/userinfo
+# YOUTUBE_SCOPES=https://www.googleapis.com/auth/youtube.upload,https://www.googleapis.com/auth/youtube.readonly,openid,email,profile
+#
+# # TikTok — https://developers.tiktok.com/doc/login-kit-web
+# TIKTOK_CLIENT_ID=
+# TIKTOK_CLIENT_SECRET=
+# TIKTOK_AUTH_URL=https://www.tiktok.com/v2/auth/authorize/
+# TIKTOK_TOKEN_URL=https://open.tiktokapis.com/v2/oauth/token/
+# TIKTOK_PROFILE_URL=https://open.tiktokapis.com/v2/user/info/
+# TIKTOK_SCOPES=user.info.basic,video.publish,video.upload
+#
+# # Encryption KEK for OAuth tokens at rest (AES-GCM-256). Composio holds tokens
+# # now so we don't need a local KEK any more.
+# INTEGRATION_TOKEN_KEK=

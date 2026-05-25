@@ -159,6 +159,7 @@ CREATE TABLE `integrations` (
 	`refresh_token` text,
 	`token_expires_at` integer,
 	`scope` text,
+	`composio_connected_account_id` text,
 	`metadata` text,
 	`status` text DEFAULT 'active' NOT NULL,
 	`connected_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
@@ -169,4 +170,5 @@ CREATE TABLE `integrations` (
 );
 --> statement-breakpoint
 CREATE INDEX `integrations_user_id_idx` ON `integrations` (`user_id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `integrations_user_id_platform_unique` ON `integrations` (`user_id`,`platform`);
+CREATE UNIQUE INDEX `integrations_user_id_platform_unique` ON `integrations` (`user_id`,`platform`);--> statement-breakpoint
+CREATE INDEX `integrations_composio_account_id_idx` ON `integrations` (`composio_connected_account_id`);

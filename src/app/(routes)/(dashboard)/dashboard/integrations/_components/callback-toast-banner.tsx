@@ -10,6 +10,7 @@ import {
 } from "@/lib/constants/integrations"
 
 const ERROR_MESSAGES: Record<string, string> = {
+  // Legacy hand-rolled OAuth codes (still possible if old links arrive).
   missing_state: "Authorization state was missing — please try again.",
   invalid_state: "Authorization state was invalid or expired.",
   missing_code: "Provider did not return an authorization code.",
@@ -17,6 +18,15 @@ const ERROR_MESSAGES: Record<string, string> = {
   unauthorized: "Your session expired during connection.",
   callback_failed: "Could not complete the connection. Please try again.",
   access_denied: "Connection was cancelled.",
+  // Composio-era codes.
+  invalid_platform: "Unknown platform in callback URL.",
+  not_configured:
+    "This integration isn't configured yet. Set the Composio auth-config env var.",
+  composio_failed: "Composio could not complete the connection.",
+  platform_disabled: "This integration is coming soon.",
+  missing_connected_account_id:
+    "Composio didn't return a connected-account id.",
+  failed: "Composio reported the connection failed.",
 }
 
 export function CallbackToastBanner() {

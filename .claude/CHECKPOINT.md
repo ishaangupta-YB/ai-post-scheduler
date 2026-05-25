@@ -624,3 +624,85 @@ cloudflared tunnel --url http://localhost:3000
 Register `https://<tunnel>/api/integrations/callback` as the redirect URI on each provider's portal. Set `NEXT_PUBLIC_APP_URL=https://<tunnel>` in `.dev.vars`. For a stable URL across restarts, set up a **Named Tunnel** under Cloudflare Zero Trust (free tier).
 
 `ngrok http 3000` works identically and is fine if the user already has an account.
+
+---
+
+## 18. Session log — 2026-05-25 (session 8 — Composio migration: replace hand-rolled OAuth with @composio/core + direct tool execution)
+
+User asked to retire the entire hand-rolled OAuth stack (`src/lib/oauth/*` + 7 per-provider files + `connect/callback/disconnect` route handlers) in favor of Composio. Composio hosts the OAuth dance, stores tokens server-side, refreshes them, and exposes `composio.tools.execute(slug, { userId, arguments, version })` for direct, no-LLM tool execution. Plan: `/Users/ishaan/.claude/plans/first-go-through-claude-fancy-bunny.md`.
+
+### Decisions taken (via AskUserQuestion)
+- **Schema:** keep the legacy `access_token`/`refresh_token`/`token_expires_at`/`scope` columns (always null going forward) and **add** `composio_connected_account_id text` + index `integrations_composio_account_id_idx`. Single-migration regen (same pattern as sessions 3/5/6).
+- **Twitter:** **skipped** this session — `COMPOSIO_PLATFORMS.TWITTER.enabled = false`. Connect button surfaces a `503 platform_disabled` → "Coming soon" toast. Re-enable when the user picks Composio-managed vs. custom Twitter auth.
+- **Disconnect:** **delete on Composio** (`composio.connectedAccounts.delete`) **and** soft-revoke our local row (`status='revoked'`, tokens nulled, `composioConnectedAccountId` nulled). Best-effort — Composio errors get logged but the local revoke still succeeds.
+- **Execute scope:** ship the `executeIntegrationTool()` primitive in `src/lib/composio/tools.ts` + one smoke-test route at `/api/integrations/execute`. Per-platform helpers (postToLinkedIn, etc.) deferred until the scheduler PR.
+
+### Files added
+- `src/lib/composio/client.ts` — `Composio` singleton, reads `COMPOSIO_API_KEY` from `getCloudflareContext().env` (Workers runtime has no `process.env`). Exports `ComposioNotConfiguredError({ missingKeys })`.
+- `src/lib/composio/platforms.ts` — `COMPOSIO_PLATFORMS` map: per-platform `{ toolkitSlug, authConfigEnvVar, enabled }`. `getPlatformConfig` / `getAuthConfigId` / `getAppUrl` helpers.
+- `src/lib/composio/connections.ts` — `startConnection({ userId, platform, callbackUrl })` → `{ connectedAccountId, redirectUrl }` via `composio.connectedAccounts.link()`. `getConnection(id)` for callback-time profile pull. `deleteConnection(id)` swallows 404 by `name`/`code`/`statusCode`.
+- `src/lib/composio/tools.ts` — `executeIntegrationTool({ userId, toolSlug, arguments, version? })` wraps `composio.tools.execute()`, times the call, normalizes to `{ ok, data, error, elapsedMs, toolSlug }`. Never throws — error surfaced as `{ ok: false, error }`.
+- `src/app/api/integrations/execute/route.ts` (POST) — auth-gated smoke-test endpoint. Body `{ platform, toolSlug, arguments, version? }`. Checks the integration is `active` with a `composioConnectedAccountId` before executing; otherwise 409 with reconnect hint.
+
+### Files rewritten (same URL contracts, Composio internals)
+- `src/app/api/integrations/connect/route.ts` — POST `{ platform }` → calls `startConnection`, returns `{ url }`. Short-circuits with `503 platform_disabled` when `cfg.enabled === false` (Twitter). Surfaces `ComposioNotConfiguredError.missingKeys` as 503 `{ missing: ["COMPOSIO_AUTH_CONFIG_X"] }`.
+- `src/app/api/integrations/callback/route.ts` — GET; reads Composio's `?status=success&connectedAccountId=…` plus our round-tripped `?platform=…`. Best-effort profile pull via `getConnection`, opportunistic field extraction (username/handle/profile_image_url/etc.), 4KB raw cap, `onConflictDoUpdate([userId, platform])` writes. `safeRedirectPath()` open-redirect guard kept.
+- `src/app/api/integrations/disconnect/route.ts` — POST `{ integrationId }`. SELECT-then-UPDATE pattern preserved; calls `deleteConnection(row.composioConnectedAccountId)` first (best-effort, log-and-continue), then UPDATEs local row to clear tokens, `composioConnectedAccountId`, and set `status='revoked'`.
+
+### Schema change
+- `src/db/integrations-schema.ts` — added `composioConnectedAccountId: text("composio_connected_account_id")` and `index("integrations_composio_account_id_idx")`. Legacy token columns (accessToken/refreshToken/tokenExpiresAt/scope) kept null going forward — annotated in the file.
+- `drizzle/0000_init.sql` regenerated as a single migration: **10 tables, integrations table now has 17 columns + 3 indexes (including the new composio index)**. Wiped local D1 (`rm -rf .wrangler/state/v3/d1`) and re-applied — **31 SQL commands** executed.
+
+### Legacy retirement (14 files commented out, NOT deleted)
+Each file in `src/lib/oauth/**/*.ts` was rewritten with a **"LEGACY — DO NOT TOUCH"** banner header and its entire original body wrapped in a block comment (`/* … */`). A trailing `export {}` keeps each file a valid TypeScript module. Files:
+- `src/lib/oauth/crypto.ts` · `state.ts` · `pkce.ts` · `types.ts` · `index.ts` · `refresh.ts`
+- `src/lib/oauth/providers/_shared.ts` · `twitter.ts` · `linkedin.ts` · `facebook.ts` · `instagram.ts` · `threads.ts` · `youtube.ts` · `tiktok.ts`
+
+`refresh.ts` had an internal JSDoc `*/` that would have prematurely closed the outer block comment — the JSDoc was replaced with line-comment summary; the rest of the body is preserved verbatim.
+
+**Future agents: do not re-enable or import from these files. The OAuth library is obsolete because Composio now manages OAuth + tokens server-side.**
+
+### Env vars
+- **`src/env-extra.d.ts`** — added the Composio block:
+  ```ts
+  COMPOSIO_API_KEY?: string
+  COMPOSIO_AUTH_CONFIG_LINKEDIN?: string
+  COMPOSIO_AUTH_CONFIG_INSTAGRAM?: string
+  COMPOSIO_AUTH_CONFIG_THREADS?: string
+  COMPOSIO_AUTH_CONFIG_FACEBOOK?: string
+  COMPOSIO_AUTH_CONFIG_YOUTUBE?: string
+  COMPOSIO_AUTH_CONFIG_TIKTOK?: string
+  ```
+  Legacy OAuth env keys (`TWITTER_CLIENT_ID`/etc., `INTEGRATION_TOKEN_KEK`) kept optional under a "LEGACY — superseded by Composio" comment.
+- **`.dev.vars.example`** — added a Composio setup block (active) right after `NEXT_PUBLIC_APP_URL`, wrapped the entire per-platform OAuth block + `INTEGRATION_TOKEN_KEK` in a "LEGACY" banner with instructions not to fill them in for new setups.
+
+### UI tweaks (small)
+- `integration-row-actions.tsx` — Connect button distinguishes `platform_disabled` (friendly "Coming soon" toast) from `not_configured` (lists missing env vars).
+- `callback-toast-banner.tsx` — added Composio-era error codes: `invalid_platform`, `not_configured`, `composio_failed`, `platform_disabled`, `missing_connected_account_id`, `failed`. Legacy codes (missing_state / invalid_state / missing_pkce) kept since the route signature is the same.
+
+### Cloudflare Workers compatibility
+`@composio/core` 0.10.0 exposes `workerd` / `edge-light` import-map entries (verified in `node_modules/@composio/core/package.json#imports`), so the SDK runs natively on Cloudflare Workers via OpenNext without polyfills. Crucially: the SDK reads `COMPOSIO_API_KEY` from `process.env` by default — Workers don't expose `process.env`, so `src/lib/composio/client.ts` passes `apiKey` explicitly from `getCloudflareContext().env`.
+
+### Verified this session
+- `pnpm exec tsc --noEmit` — clean
+- `pnpm drizzle-kit generate --name init` — single migration, 10 tables, 17-column integrations
+- `rm -rf .wrangler/state/v3/d1 && npx wrangler d1 migrations apply --local` — 31 SQL commands succeeded
+- `pnpm exec next build` — clean; all 18 routes registered (`/api/integrations/{,/connect,/callback,/disconnect,/execute}` present)
+
+### NOT verified this session (user follow-up)
+- **No live Composio round-trip.** Needs `COMPOSIO_API_KEY` + 6 `COMPOSIO_AUTH_CONFIG_<PLATFORM>` IDs filled in `.dev.vars`, then click Connect on `/dashboard/integrations` and verify the Composio-hosted auth flow + the new `?status=success&connectedAccountId=…` callback path.
+- **No live tool execution.** Use `/api/integrations/execute` with a verified slug from `composio.tools.get('default', { toolkits: ['linkedin'], limit: 100 })` — do **not** invent slugs. Example payload:
+  ```bash
+  curl -X POST http://localhost:3000/api/integrations/execute \
+    -H 'Cookie: <session>' -H 'Content-Type: application/json' \
+    -d '{"platform":"LINKEDIN","toolSlug":"<verified-slug>","arguments":{...}}'
+  ```
+- **Twitter** is disabled in `COMPOSIO_PLATFORMS.TWITTER` — the connect button intentionally returns 503; re-enable when the user has decided between Composio-managed and custom Twitter auth.
+- **Remote D1 migration** not yet applied — `npx wrangler d1 migrations apply aipostsc-auth-db --remote` before shipping.
+- **Token refresh** — Composio handles this server-side. The legacy `refreshIntegrationTokens()` is obsolete (lives in the now-commented `src/lib/oauth/refresh.ts`).
+
+### User TODO before going live with Composio
+1. Sign in at https://platform.composio.dev, create a project, copy the project API key into `.dev.vars` as `COMPOSIO_API_KEY=`.
+2. On the Composio dashboard, create an Auth Config (`use_composio_managed_auth` is simplest) for each of: LinkedIn, Instagram, Threads, Facebook, YouTube, TikTok. Copy each `ac_…` ID into the matching `COMPOSIO_AUTH_CONFIG_<PLATFORM>` env var in `.dev.vars`.
+3. Run `pnpm cf-typegen` to refresh `cloudflare-env.d.ts`.
+4. Still need the HTTPS tunnel (Cloudflare Tunnel / ngrok) for any OAuth flow that requires HTTPS redirect URIs — Composio uses its own redirect, but the final hop back to `<NEXT_PUBLIC_APP_URL>/api/integrations/callback` must be reachable.

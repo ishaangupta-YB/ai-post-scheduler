@@ -37,12 +37,18 @@ export const integrations = sqliteTable(
     handle: text("handle"),
     profileImage: text("profile_image"),
     profileUrl: text("profile_url"),
-    // OAuth credentials. Stored as plaintext today; before any real OAuth ships,
-    // wrap in envelope-encryption (AES-GCM with a KEK in Workers Secrets).
+    // LEGACY — these four columns held our hand-rolled OAuth credentials before
+    // the Composio migration (see CHECKPOINT §17). They remain (always null) so
+    // existing migrations/code still typecheck, but new writes go through
+    // composioConnectedAccountId instead. Composio holds the real tokens.
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     tokenExpiresAt: integer("token_expires_at", { mode: "timestamp_ms" }),
     scope: text("scope"),
+    // Composio-hosted connected-account id (the `nanoid` returned by
+    // composio.connectedAccounts.link). Use this for tools.execute lookups and
+    // for the matching delete call on disconnect.
+    composioConnectedAccountId: text("composio_connected_account_id"),
     // Platform-specific data (e.g., LinkedIn organization IDs, Instagram business account ID).
     metadata: text("metadata", { mode: "json" }).$type<
       Record<string, unknown>
@@ -69,6 +75,9 @@ export const integrations = sqliteTable(
     uniqueIndex("integrations_user_id_platform_unique").on(
       table.userId,
       table.platform,
+    ),
+    index("integrations_composio_account_id_idx").on(
+      table.composioConnectedAccountId,
     ),
   ],
 )

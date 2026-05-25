@@ -21,14 +21,24 @@ export function ConnectButton({ platform }: { platform: string }) {
       })
       if (res.status === 503) {
         const json = (await res.json().catch(() => null)) as {
+          error?: string
+          message?: string
           missing?: string[]
         } | null
+        if (json?.error === "platform_disabled") {
+          toast("Coming soon", {
+            description:
+              json.message ??
+              `${platform} via Composio is coming soon — we're working on it.`,
+          })
+          return
+        }
         const missing = json?.missing ?? []
-        toast("Coming soon", {
+        toast("Not configured", {
           description:
             missing.length > 0
               ? `Set these env vars to enable ${platform}: ${missing.join(", ")}`
-              : `This integration isn't configured yet.`,
+              : json?.message ?? `This integration isn't configured yet.`,
         })
         return
       }

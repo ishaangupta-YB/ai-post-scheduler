@@ -1,3 +1,26 @@
+/**
+ * ============================================================================
+ * LEGACY — DO NOT TOUCH
+ * ============================================================================
+ * This file is part of the hand-rolled per-platform OAuth system that was
+ * REPLACED by Composio in session 8 (2026-05-25). It is kept (commented out)
+ * for historical reference only.
+ *
+ * Active OAuth + tool execution now lives in:
+ *   src/lib/composio/        — SDK client, platform map, connection wrappers
+ *   src/lib/composio/tools.ts — direct tool execution (no LLM)
+ *   src/app/api/integrations/{connect,callback,disconnect}/route.ts
+ *
+ * Future agents: DO NOT re-enable, edit, or import from this file. The
+ * primitives here (HMAC state, PKCE, AES-GCM token encryption, per-provider
+ * exchange code, token refresh) are obsolete because Composio manages OAuth
+ * tokens server-side. If you need any of these again, build fresh — don't
+ * resurrect this code.
+ * ============================================================================
+ */
+
+/* eslint-disable */
+/*
 import { and, eq } from "drizzle-orm"
 
 import { getDb } from "@/db"
@@ -20,20 +43,13 @@ export class IntegrationNotRefreshableError extends Error {
   }
 }
 
-/**
- * Refresh OAuth tokens for a stored integration row.
- *
- * Decrypts the stored refresh_token, calls the provider's refreshToken method,
- * re-encrypts the new tokens, and writes them back via a scoped UPDATE.
- *
- * Returns the updated expiry. Throws if:
- *   - the integration row doesn't exist
- *   - the integration is revoked / has no refresh_token
- *   - the provider doesn't expose a `refreshToken` method (Meta providers — Facebook, Instagram, Threads)
- *   - the provider call fails (token revoked, network error, etc.)
- *
- * NOT yet called from anywhere; this is a primitive for the future publisher daemon.
- */
+// (Original JSDoc removed during legacy wrap to avoid nested comment closers.)
+// Summary: refreshIntegrationTokens(integrationId, userId) decrypted the stored
+// refresh_token, called the provider's refreshToken method, re-encrypted, and
+// wrote back via a scoped UPDATE. Threw IntegrationNotFoundError /
+// IntegrationNotRefreshableError on the various unhappy paths. Was a primitive
+// for the future publisher daemon; Composio now handles token refresh, so
+// this is obsolete.
 export async function refreshIntegrationTokens(
   integrationId: string,
   userId: string,
@@ -68,8 +84,6 @@ export async function refreshIntegrationTokens(
   const token = await provider.refreshToken({ refreshToken: plaintextRefresh })
 
   const encAccess = await encryptNullable(token.accessToken)
-  // Providers may rotate refresh tokens on each refresh (Google, Twitter, LinkedIn often do).
-  // Fall back to the previous one if the response omits a new refresh_token.
   const encRefresh =
     token.refreshToken != null
       ? await encryptNullable(token.refreshToken)
@@ -91,3 +105,6 @@ export async function refreshIntegrationTokens(
 
   return { tokenExpiresAt: token.expiresAt ?? null }
 }
+*/
+
+export {}

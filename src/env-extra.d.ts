@@ -22,7 +22,23 @@ interface CloudflareEnv {
   // One-time top-up SKUs (never expire in our ledger)
   DODO_TOPUP_500?: string
 
-  // OAuth — per-platform (all optional; getProviderConfig throws cleanly if missing)
+  // Composio (active) — single SDK + dashboard-managed auth configs per platform.
+  // See .dev.vars.example for setup steps and src/lib/composio/.
+  COMPOSIO_API_KEY?: string
+  COMPOSIO_AUTH_CONFIG_LINKEDIN?: string
+  COMPOSIO_AUTH_CONFIG_INSTAGRAM?: string
+  COMPOSIO_AUTH_CONFIG_THREADS?: string
+  COMPOSIO_AUTH_CONFIG_FACEBOOK?: string
+  COMPOSIO_AUTH_CONFIG_YOUTUBE?: string
+  COMPOSIO_AUTH_CONFIG_TIKTOK?: string
+  // COMPOSIO_AUTH_CONFIG_TWITTER deferred — Twitter is disabled in the UI for now.
+
+  // ==========================================================================
+  // LEGACY — the per-platform OAuth keys below were used by src/lib/oauth/*
+  // before the Composio migration (CHECKPOINT §17). They remain optional so
+  // existing .dev.vars files still typecheck, but the OAuth library is now
+  // commented out and nothing reads these. Safe to drop later.
+  // ==========================================================================
   TWITTER_CLIENT_ID?: string
   TWITTER_CLIENT_SECRET?: string
   TWITTER_AUTH_URL?: string

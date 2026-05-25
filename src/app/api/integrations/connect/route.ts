@@ -6,13 +6,9 @@ import {
   type IntegrationPlatform,
 } from "@/db/integrations-schema"
 import { getAuth } from "@/lib/auth"
-import {
-  ProviderNotConfiguredError,
-  getAppUrl,
-  getOAuthProvider,
-} from "@/lib/oauth"
-import { createPkcePair, getPkceCookieName } from "@/lib/oauth/pkce"
-import { createOAuthState } from "@/lib/oauth/state"
+import { ComposioNotConfiguredError } from "@/lib/composio/client"
+import { startConnection } from "@/lib/composio/connections"
+import { getAppUrl, getPlatformConfig } from "@/lib/composio/platforms"
 
 export async function POST(request: Request) {
   const session = await getAuth().api.getSession({ headers: await headers() })
@@ -34,22 +30,16 @@ export async function POST(request: Request) {
     )
   }
   const typedPlatform = platform as IntegrationPlatform
+  const cfg = getPlatformConfig(typedPlatform)
 
-  let provider
-  try {
-    provider = getOAuthProvider(typedPlatform)
-  } catch (err) {
-    if (err instanceof ProviderNotConfiguredError) {
-      return NextResponse.json(
-        {
-          error: "not_configured",
-          message: err.message,
-          missing: err.missingKeys,
-        },
-        { status: 503 },
-      )
-    }
-    throw err
+  if (!cfg.enabled) {
+    return NextResponse.json(
+      {
+        error: "platform_disabled",
+        message: `${typedPlatform} via Composio is coming soon`,
+      },
+      { status: 503 },
+    )
   }
 
   let appUrl: string
@@ -62,26 +52,31 @@ export async function POST(request: Request) {
     )
   }
 
-  const redirectTo = "/dashboard/integrations"
-  const state = await createOAuthState({
-    userId: session.user.id,
-    platform: typedPlatform,
-    redirectTo,
-  })
-  const redirectUri = `${appUrl}/api/integrations/callback`
+  // Composio appends `?status=success&connectedAccountId=…` (or status=failed)
+  // to whatever callbackUrl we pass. We round-trip the platform via a query
+  // param so the callback knows which row to upsert without re-reading
+  // Composio. (`appName` from Composio is the toolkit slug, not our enum.)
+  const callbackUrl = `${appUrl}/api/integrations/callback?platform=${encodeURIComponent(typedPlatform)}`
 
-  const pkce = provider.usesPkce ? await createPkcePair() : null
-
-  let url: string
   try {
-    url = provider.getAuthorizationUrl({
-      state,
-      redirectUri,
-      codeChallenge: pkce?.codeChallenge,
-      codeChallengeMethod: pkce?.codeChallengeMethod,
+    const { redirectUrl } = await startConnection({
+      userId: session.user.id,
+      platform: typedPlatform,
+      callbackUrl,
     })
+    if (!redirectUrl) {
+      return NextResponse.json(
+        {
+          error: "no_redirect_url",
+          message:
+            "Composio did not return a redirect URL for this auth scheme",
+        },
+        { status: 502 },
+      )
+    }
+    return NextResponse.json({ url: redirectUrl })
   } catch (err) {
-    if (err instanceof ProviderNotConfiguredError) {
+    if (err instanceof ComposioNotConfiguredError) {
       return NextResponse.json(
         {
           error: "not_configured",
@@ -91,21 +86,13 @@ export async function POST(request: Request) {
         { status: 503 },
       )
     }
-    throw err
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(
+      `[composio/connect] start failed platform=${typedPlatform} userId=${session.user.id} message=${message}`,
+    )
+    return NextResponse.json(
+      { error: "composio_failed", message },
+      { status: 502 },
+    )
   }
-
-  const response = NextResponse.json({ url })
-
-  if (pkce) {
-    const cookieName = await getPkceCookieName(state)
-    response.cookies.set(cookieName, pkce.codeVerifier, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 10,
-    })
-  }
-
-  return response
 }

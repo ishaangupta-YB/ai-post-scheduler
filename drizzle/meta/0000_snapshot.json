@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c0ed7fb1-601a-4d53-92e3-abfad8821811",
+  "id": "c83782f0-9754-4b8f-b9b5-9ae8d8405432",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "accounts": {
@@ -1122,6 +1122,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "composio_connected_account_id": {
+          "name": "composio_connected_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "metadata": {
           "name": "metadata",
           "type": "text",
@@ -1184,6 +1191,13 @@
             "platform"
           ],
           "isUnique": true
+        },
+        "integrations_composio_account_id_idx": {
+          "name": "integrations_composio_account_id_idx",
+          "columns": [
+            "composio_connected_account_id"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
